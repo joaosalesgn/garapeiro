@@ -1,0 +1,15 @@
+{% extends 'atendimento/base.html' %}
+{% block title %}Visão geral{% endblock %}
+{% block content %}
+<h1>Visão geral</h1>
+<div class="grid">
+  <section class="card"><div class="muted">Comandas abertas</div><div class="metric">{{ total_comandas }}</div><a href="{% url 'atendimento:comandas' %}">Ir para atendimento →</a></section>
+  <section class="card"><div class="muted">Itens em produção</div><div class="metric">{{ itens_cozinha }}</div><a href="{% url 'atendimento:cozinha' %}">Abrir painel da cozinha →</a></section>
+  <section class="card"><div class="muted">Caixa</div><div class="metric">{% if caixa %}Aberto{% else %}Fechado{% endif %}</div><a href="{% url 'atendimento:caixa' %}">Acompanhar caixa →</a></section>
+</div>
+<div class="toolbar"><a class="btn" href="{% url 'atendimento:nova_comanda' %}">＋ Abrir comanda</a><a class="btn secondary" href="{% url 'atendimento:comandas' %}">Ver comandas</a></div>
+<section class="card"><h2>Comandas em andamento</h2>
+  {% for comanda in comandas %}<div class="row"><div><strong><a href="{% url 'atendimento:comanda' comanda.pk %}">Comanda #{{ comanda.pk }}</a></strong><div class="subtle">{{ comanda.get_canal_display }}{% if comanda.mesa %} · Mesa {{ comanda.mesa.numero }}{% endif %}{% if comanda.cliente %} · {{ comanda.cliente.nome }}{% endif %}</div></div><div class="total">R$ {{ comanda.total|floatformat:2 }}</div></div>
+  {% empty %}<div class="empty">Nenhuma comanda aberta no momento.</div>{% endfor %}
+</section>
+{% endblock %}

@@ -1,75 +1,79 @@
+from decimal import Decimal
+
 from django import forms
+from django.core.exceptions import ValidationError
 
-from .models import Adicional, Cliente, Comanda, Mesa, Produto
+from .models import Adicional, Cliente, Comanda, Mesa, Pagamento, Produto
 
 
-class ComandaForm(forms.ModelForm):
-    class Meta:
-        model = Comanda
-        fields = ("canal", "mesa", "cliente", "observacao")
-        widgets = {"observacao": forms.Textarea(attrs={"rows": 2})}
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["mesa"].queryset = Mesa.objects.filter(ativa=True)
-        self.fields["mesa"].required = False
-        self.fields["cliente"].queryset = Cliente.objects.filter(ativo=True)
-        self.fields["cliente"].required = False
-        self.fields["mesa"].empty_label = "Selecione uma mesa"
-        self.fields["cliente"].empty_label = "Sem cliente vinculado"
+class NovaComandaForm(forms.Form):
+    canal = forms.ChoiceField(choices=Comanda.Canal.choices, initial=Comanda.Canal.MESA)
+    mesa = forms.ModelChoiceField(queryset=Mesa.objects.filter(ativa=True), required=False)
+    cliente = forms.ModelChoiceField(queryset=Cliente.objects.filter(ativo=True), required=False)
+    observacao = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 2}))
 
     def clean(self):
-        cleaned_data = super().clean()
-        canal = cleaned_data.get("canal")
-        mesa = cleaned_data.get("mesa")
-        if canal == Comanda.Canal.MESA and mesa is None:
-            self.add_error("mesa", "Selecione a mesa para atendimento no salão.")
-        if canal != Comanda.Canal.MESA and mesa is not None:
-            cleaned_data["mesa"] = None
-        return cleaned_data
+        dados = super().clean()
+        if dados.get("canal") == Comanda.Canal.MESA and not dados.get("mesa"):
+            self.add_error("mesa", "Selecione uma mesa para atendimento no salão.")
+        mesa = dados.get("mesa")
+        if dados.get("canal") != Comanda.Canal.MESA and mesa:
+            self.add_error("mesa", "Mesa só deve ser informada para atendimento no salão.")
+        elif dados.get("canal") == Comanda.Canal.MESA and mesa and Comanda.objects.filter(
+            mesa=mesa, status=Comanda.Status.ABERTA
+        ).exists():
+            self.add_error("mesa", "Já existe uma comanda aberta nesta mesa.")
+        return dados
 
 
 class AdicionarItemForm(forms.Form):
-    produto = forms.ModelChoiceField(
-        queryset=Produto.objects.none(),
-        empty_label="Selecione um produto",
-        label="Produto",
-    )
-    adicionais = forms.ModelMultipleChoiceField(
-        queryset=Adicional.objects.none(),
-        required=False,
-        label="Adicionais",
-        widget=forms.CheckboxSelectMultiple,
-    )
-    quantidade = forms.IntegerField(min_value=1, max_value=999, initial=1, label="Quantidade")
-    observacao = forms.CharField(
-        required=False,
-        max_length=250,
-        label="Observação do item",
-        widget=forms.TextInput(attrs={"placeholder": "Ex.: sem cebola"}),
-    )
+    produto = forms.ModelChoiceField(queryset=Produto.objects.filter(ativo=True).select_related("categoria"))
+    quantidade = forms.IntegerField(min_value=1, max_value=999, initial=1)
+    adicionais = forms.ModelMultipleChoiceField(queryset=Adicional.objects.none(), required=False)
+    observacao = forms.CharField(required=False, max_length=250)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["produto"].queryset = Produto.objects.filter(ativo=True).select_related("categoria")
-        self.fields["produto"].label_from_instance = lambda produto: (
-            f"{produto.categoria.nome} — {produto.nome} (R$ {produto.preco:.2f})"
-        )
-        self.fields["adicionais"].queryset = Adicional.objects.filter(ativo=True).order_by("nome")
-        self.fields["adicionais"].label_from_instance = lambda adicional: (
-            f"{adicional.nome} (+ R$ {adicional.preco:.2f})"
-        )
+        produto_id = self.data.get("produto") or self.initial.get("produto")
+        if produto_id:
+            self.fields["adicionais"].queryset = Adicional.objects.filter(
+                ativo=True, produtos_permitidos__produto_id=produto_id
+            ).distinct().order_by("nome")
 
     def clean(self):
-        cleaned_data = super().clean()
-        produto = cleaned_data.get("produto")
-        adicionais = cleaned_data.get("adicionais")
+        dados = super().clean()
+        produto = dados.get("produto")
+        adicionais = dados.get("adicionais")
         if produto and adicionais:
             permitidos = set(produto.adicionais_permitidos.values_list("adicional_id", flat=True))
-            nao_vinculados = [adicional.nome for adicional in adicionais if adicional.pk not in permitidos]
-            if nao_vinculados:
-                self.add_error(
-                    "adicionais",
-                    "Estes adicionais não estão vinculados ao produto: " + ", ".join(nao_vinculados),
-                )
-        return cleaned_data
+            if any(adicional.pk not in permitidos for adicional in adicionais):
+                raise ValidationError("Um ou mais adicionais não estão habilitados para este produto.")
+        return dados
+
+
+class PagamentoForm(forms.Form):
+    forma = forms.ChoiceField(choices=Pagamento.Forma.choices)
+    valor = forms.DecimalField(min_value=Decimal("0.01"), max_digits=10, decimal_places=2)
+    referencia = forms.CharField(required=False, max_length=100)
+
+    def clean_valor(self):
+        valor = self.cleaned_data["valor"]
+        if valor <= 0:
+            raise ValidationError("O pagamento precisa ser maior que zero.")
+        return valor
+
+
+class AbrirCaixaForm(forms.Form):
+    valor_inicial = forms.DecimalField(min_value=Decimal("0.00"), max_digits=10, decimal_places=2, initial=Decimal("0.00"))
+    observacao = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 2}))
+
+
+class FecharCaixaForm(forms.Form):
+    valor_fechamento = forms.DecimalField(min_value=Decimal("0.00"), max_digits=10, decimal_places=2)
+    observacao = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 2}))
+
+
+class MovimentacaoForm(forms.Form):
+    tipo = forms.ChoiceField(choices=(("ENTRADA", "Entrada avulsa"), ("SAIDA", "Saída")))
+    descricao = forms.CharField(max_length=150)
+    valor = forms.DecimalField(min_value=Decimal("0.01"), max_digits=10, decimal_places=2)

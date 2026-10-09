@@ -193,10 +193,13 @@ class Comanda(RegistroCancelavel):
     @property
     def total(self):
         valor_item = models.DecimalField(max_digits=12, decimal_places=2)
-        produtos = self.itens.aggregate(
+        itens_validos = self.itens.exclude(status_producao=ComandaItem.StatusProducao.CANCELADO)
+        produtos = itens_validos.aggregate(
             valor=Sum(models.F("preco_unitario") * models.F("quantidade"), output_field=valor_item)
         )["valor"] or Decimal("0.00")
-        adicionais = ItemAdicional.objects.filter(item__comanda=self).aggregate(
+        adicionais = ItemAdicional.objects.filter(
+            item__comanda=self
+        ).exclude(item__status_producao=ComandaItem.StatusProducao.CANCELADO).aggregate(
             valor=Sum(models.F("preco_unitario") * models.F("quantidade"), output_field=valor_item)
         )["valor"] or Decimal("0.00")
         return produtos + adicionais

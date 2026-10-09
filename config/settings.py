@@ -28,7 +28,9 @@ MIDDLEWARE = [
 ROOT_URLCONF = "config.urls"
 TEMPLATES = [{
     "BACKEND": "django.template.backends.django.DjangoTemplates",
-    "DIRS": [BASE_DIR / "templates"],
+    # Os templates operacionais são mantidos dentro do app atendimento.
+    # Não carregar cópias legadas da pasta global, que têm nomes de rotas antigos.
+    "DIRS": [],
     "APP_DIRS": True,
     "OPTIONS": {"context_processors": [
         "django.template.context_processors.request",

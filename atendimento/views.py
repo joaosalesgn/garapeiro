@@ -1,180 +1,193 @@
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db import transaction
-from django.db.models import Prefetch
+from django.db import IntegrityError, transaction
+from django.db.models import Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .forms import AdicionarItemForm, ComandaForm
+from .forms import (
+    AbrirCaixaForm, AdicionarItemForm, FecharCaixaForm, MovimentacaoForm,
+    NovaComandaForm, PagamentoForm,
+)
 from .models import (
-    Caixa, Comanda, ComandaItem, ItemAdicional, MovimentacaoCaixa, Pagamento,
+    Caixa, Comanda, ComandaItem, ItemAdicional, MovimentacaoCaixa, Pagamento
 )
 
 
-def _comanda_aberta(pk):
-    comanda = get_object_or_404(
-        Comanda.objects.select_related("mesa", "cliente").prefetch_related(
-            Prefetch("itens", queryset=ComandaItem.objects.select_related("produto").prefetch_related("adicionais")),
-            "pagamentos",
-        ),
-        pk=pk,
-    )
-    if comanda.status != Comanda.Status.ABERTA:
-        raise Http404("Esta comanda não está aberta.")
-    return comanda
+def _caixa_aberto():
+    return Caixa.objects.filter(status=Caixa.Status.ABERTO).first()
+
+
+def _total_caixa(caixa):
+    entradas_pagamentos = caixa.pagamentos.aggregate(total=Sum("valor"))["total"] or Decimal("0.00")
+    movimentos = list(caixa.movimentacoes.values("tipo").annotate(total=Sum("valor")))
+    entradas_avulsas = sum((m["total"] for m in movimentos if m["tipo"] == MovimentacaoCaixa.Tipo.ENTRADA), Decimal("0.00"))
+    saidas = sum((m["total"] for m in movimentos if m["tipo"] == MovimentacaoCaixa.Tipo.SAIDA), Decimal("0.00"))
+    esperado = caixa.valor_inicial + entradas_pagamentos + entradas_avulsas - saidas
+    return {
+        "pagamentos": entradas_pagamentos,
+        "entradas_avulsas": entradas_avulsas,
+        "saidas": saidas,
+        "esperado": esperado,
+    }
 
 
 @login_required
-def atendimento(request):
-    comandas = Comanda.objects.filter(status=Comanda.Status.ABERTA).select_related(
-        "mesa", "cliente"
-    ).prefetch_related("itens")
-    caixa = Caixa.objects.filter(status=Caixa.Status.ABERTO).first()
-
-    if request.method == "POST":
-        form = ComandaForm(request.POST)
-        if form.is_valid():
-            mesa = form.cleaned_data.get("mesa")
-            if mesa and Comanda.objects.filter(
-                mesa=mesa, status=Comanda.Status.ABERTA
-            ).exists():
-                form.add_error("mesa", "Já existe uma comanda aberta nesta mesa.")
-            else:
-                try:
-                    with transaction.atomic():
-                        comanda = form.save(commit=False)
-                        comanda.criado_por = request.user
-                        comanda.atualizado_por = request.user
-                        comanda.save()
-                except Exception:
-                    form.add_error(None, "Não foi possível abrir a comanda. Atualize a tela e tente novamente.")
-                else:
-                    messages.success(request, f"Comanda {comanda.pk} aberta.")
-                    return redirect("atendimento:comanda", pk=comanda.pk)
-    else:
-        form = ComandaForm()
-
-    return render(request, "atendimento/atendimento.html", {
-        "form": form,
-        "comandas": comandas,
-        "caixa": caixa,
+def inicio(request):
+    comandas_abertas = Comanda.objects.filter(status=Comanda.Status.ABERTA).select_related("mesa", "cliente")
+    caixa = _caixa_aberto()
+    return render(request, "atendimento/inicio.html", {
+        "comandas": comandas_abertas[:12], "caixa": caixa,
+        "total_comandas": comandas_abertas.count(),
+        "itens_cozinha": ComandaItem.objects.filter(
+            status_producao=ComandaItem.StatusProducao.ENVIADO,
+            comanda__status=Comanda.Status.ABERTA,
+        ).count(),
     })
 
 
 @login_required
-def comanda_detalhe(request, pk):
-    comanda = _comanda_aberta(pk)
-    caixa = Caixa.objects.filter(status=Caixa.Status.ABERTO).first()
-    itens_form = AdicionarItemForm()
+def comandas(request):
+    abertas = Comanda.objects.filter(status=Comanda.Status.ABERTA).select_related("mesa", "cliente")
+    encerradas = Comanda.objects.exclude(status=Comanda.Status.ABERTA).select_related("mesa", "cliente")[:30]
+    return render(request, "atendimento/comandas.html", {"abertas": abertas, "encerradas": encerradas})
 
-    if request.method == "POST":
-        if "adicionar_item" in request.POST:
-            itens_form = AdicionarItemForm(request.POST)
-            if itens_form.is_valid():
-                produto = itens_form.cleaned_data["produto"]
-                quantidade = itens_form.cleaned_data["quantidade"]
-                with transaction.atomic():
-                    item = ComandaItem.objects.create(
-                        comanda=comanda,
-                        produto=produto,
-                        produto_nome=produto.nome,
-                        quantidade=quantidade,
-                        preco_unitario=produto.preco,
-                        observacao=itens_form.cleaned_data["observacao"],
-                        criado_por=request.user,
-                        atualizado_por=request.user,
-                    )
-                    for adicional in itens_form.cleaned_data["adicionais"]:
-                        ItemAdicional.objects.create(
-                            item=item,
-                            adicional=adicional,
-                            adicional_nome=adicional.nome,
-                            quantidade=quantidade,
-                            preco_unitario=adicional.preco,
-                            criado_por=request.user,
-                            atualizado_por=request.user,
-                        )
-                messages.success(request, f"{quantidade} × {produto.nome} adicionado à comanda.")
-                return redirect("atendimento:comanda", pk=pk)
 
-        elif "registrar_pagamento" in request.POST:
-            if caixa is None:
-                messages.error(request, "Não há caixa aberto. Abra o caixa antes de receber pagamentos.")
-                return redirect("atendimento:comanda", pk=pk)
-            try:
-                valor = Decimal(request.POST.get("valor", "").replace(",", "."))
-            except (InvalidOperation, AttributeError):
-                valor = Decimal("0")
-            forma = request.POST.get("forma")
-            if valor <= 0:
-                messages.error(request, "Informe um valor de pagamento maior que zero.")
-            elif valor > comanda.saldo:
-                messages.error(request, "O pagamento não pode ser maior que o saldo da comanda.")
-            elif forma not in Pagamento.Forma.values:
-                messages.error(request, "Selecione uma forma de pagamento válida.")
-            else:
-                with transaction.atomic():
-                    caixa_atual = Caixa.objects.select_for_update().get(pk=caixa.pk)
-                    comanda_atual = Comanda.objects.select_for_update().get(pk=comanda.pk)
-                    if caixa_atual.status != Caixa.Status.ABERTO or comanda_atual.status != Comanda.Status.ABERTA:
-                        messages.error(request, "O caixa ou a comanda deixou de estar aberto.")
-                        return redirect("atendimento:comanda", pk=pk)
-                    saldo = comanda_atual.saldo
-                    if valor > saldo:
-                        messages.error(request, "O pagamento ultrapassa o saldo atualizado da comanda.")
-                    else:
-                        Pagamento.objects.create(
-                            comanda=comanda_atual,
-                            caixa=caixa_atual,
-                            forma=forma,
-                            valor=valor,
-                            referencia=request.POST.get("referencia", "").strip()[:100],
-                            criado_por=request.user,
-                            atualizado_por=request.user,
-                        )
-                        messages.success(request, "Pagamento registrado.")
-                return redirect("atendimento:comanda", pk=pk)
+@login_required
+def nova_comanda(request):
+    form = NovaComandaForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        dados = form.cleaned_data
+        comanda = Comanda.objects.create(
+            canal=dados["canal"], mesa=dados["mesa"], cliente=dados["cliente"],
+            observacao=dados["observacao"], criado_por=request.user, atualizado_por=request.user,
+        )
+        messages.success(request, f"Comanda #{comanda.pk} aberta.")
+        return redirect("atendimento:comanda", pk=comanda.pk)
+    return render(request, "atendimento/formulario.html", {"form": form, "titulo": "Abrir comanda", "voltar": "atendimento:comandas"})
 
-        elif "fechar_comanda" in request.POST:
-            with transaction.atomic():
-                comanda_atual = Comanda.objects.select_for_update().get(pk=comanda.pk)
-                if not comanda_atual.itens.exists():
-                    messages.error(request, "Adicione pelo menos um item antes de fechar a comanda.")
-                elif comanda_atual.saldo > 0:
-                    messages.error(request, "Registre o pagamento do saldo antes de fechar a comanda.")
-                else:
-                    comanda_atual.status = Comanda.Status.FECHADA
-                    comanda_atual.fechada_em = timezone.now()
-                    comanda_atual.atualizado_por = request.user
-                    comanda_atual.save(update_fields=["status", "fechada_em", "atualizado_por", "atualizado_em"])
-                    messages.success(request, f"Comanda {comanda.pk} fechada.")
-                    return redirect("atendimento:lista")
-            return redirect("atendimento:comanda", pk=pk)
 
-    comanda.refresh_from_db()
-    comanda = _comanda_aberta(pk)
+@login_required
+def detalhe_comanda(request, pk):
+    comanda = get_object_or_404(Comanda.objects.select_related("mesa", "cliente"), pk=pk)
+    caixa = _caixa_aberto()
+    item_form = AdicionarItemForm(initial={"produto": request.GET.get("produto")} if request.GET.get("produto") else None)
+    pagamento_form = PagamentoForm(initial={"valor": max(comanda.saldo, Decimal("0.01"))})
     return render(request, "atendimento/comanda.html", {
-        "comanda": comanda,
-        "itens_form": itens_form,
-        "caixa": caixa,
-        "formas_pagamento": Pagamento.Forma.choices,
+        "comanda": comanda, "caixa": caixa, "item_form": item_form,
+        "pagamento_form": pagamento_form,
     })
 
 
 @login_required
 @require_POST
-def remover_item(request, pk, item_id):
-    comanda = _comanda_aberta(pk)
-    item = get_object_or_404(ComandaItem, pk=item_id, comanda=comanda)
-    if item.status_producao != ComandaItem.StatusProducao.PENDENTE:
-        messages.error(request, "Só é possível remover itens que ainda não foram enviados à cozinha.")
-    else:
-        item.delete()
-        messages.success(request, "Item removido da comanda.")
+def adicionar_item(request, pk):
+    comanda = get_object_or_404(Comanda, pk=pk)
+    if comanda.status != Comanda.Status.ABERTA:
+        messages.error(request, "Não é possível alterar uma comanda encerrada.")
+        return redirect("atendimento:comanda", pk=pk)
+    form = AdicionarItemForm(request.POST)
+    if not form.is_valid():
+        for erro in form.errors.values():
+            messages.error(request, " ".join(erro))
+        return redirect("atendimento:comanda", pk=pk)
+    dados = form.cleaned_data
+    produto = dados["produto"]
+    with transaction.atomic():
+        item = ComandaItem.objects.create(
+            comanda=comanda, produto=produto, produto_nome=produto.nome,
+            quantidade=dados["quantidade"], preco_unitario=produto.preco,
+            observacao=dados["observacao"], status_producao=(
+                ComandaItem.StatusProducao.PENDENTE if produto.vai_para_cozinha
+                else ComandaItem.StatusProducao.PRONTO
+            ), criado_por=request.user, atualizado_por=request.user,
+        )
+        for adicional in dados["adicionais"]:
+            ItemAdicional.objects.create(
+                item=item, adicional=adicional, adicional_nome=adicional.nome,
+                quantidade=1, preco_unitario=adicional.preco,
+                criado_por=request.user, atualizado_por=request.user,
+            )
+    messages.success(request, f"{dados['quantidade']} × {produto.nome} adicionado à comanda.")
+    return redirect("atendimento:comanda", pk=pk)
+
+
+@login_required
+@require_POST
+def cancelar_item(request, pk, item_id):
+    with transaction.atomic():
+        comanda = get_object_or_404(Comanda.objects.select_for_update(), pk=pk)
+        item = get_object_or_404(ComandaItem.objects.select_for_update(), pk=item_id, comanda=comanda)
+        if comanda.status != Comanda.Status.ABERTA:
+            messages.error(request, "A comanda já foi encerrada.")
+        elif item.status_producao == ComandaItem.StatusProducao.CANCELADO:
+            messages.info(request, "Este item já foi cancelado.")
+        else:
+            adicionais = sum((ad.total for ad in item.adicionais.all()), Decimal("0.00"))
+            if comanda.total - item.total - adicionais < comanda.total_pago:
+                messages.error(request, "Não é possível cancelar este item: há pagamentos já registrados que superariam o novo total da comanda.")
+                return redirect("atendimento:comanda", pk=pk)
+            item.status_producao = ComandaItem.StatusProducao.CANCELADO
+            item.atualizado_por = request.user
+            item.save(update_fields=["status_producao", "atualizado_por", "atualizado_em"])
+            messages.success(request, "Item cancelado; o histórico foi preservado.")
+    return redirect("atendimento:comanda", pk=pk)
+
+
+@login_required
+@require_POST
+def registrar_pagamento(request, pk):
+    form = PagamentoForm(request.POST)
+    if not form.is_valid():
+        for erro in form.errors.values():
+            messages.error(request, " ".join(erro))
+        return redirect("atendimento:comanda", pk=pk)
+    with transaction.atomic():
+        comanda = get_object_or_404(Comanda.objects.select_for_update(), pk=pk)
+        caixa = Caixa.objects.select_for_update().filter(status=Caixa.Status.ABERTO).first()
+        if comanda.status != Comanda.Status.ABERTA:
+            messages.error(request, "Não é possível receber pagamento de uma comanda encerrada.")
+        elif not caixa:
+            messages.error(request, "Abra o caixa antes de registrar pagamentos.")
+        elif comanda.total <= 0:
+            messages.error(request, "Adicione pelo menos um item antes do pagamento.")
+        elif form.cleaned_data["valor"] > comanda.saldo:
+            messages.error(request, f"O valor supera o saldo de R$ {comanda.saldo:.2f}.")
+        else:
+            Pagamento.objects.create(
+                comanda=comanda, caixa=caixa, forma=form.cleaned_data["forma"],
+                valor=form.cleaned_data["valor"], referencia=form.cleaned_data["referencia"],
+                criado_por=request.user, atualizado_por=request.user,
+            )
+            messages.success(request, "Pagamento registrado no caixa aberto.")
+    return redirect("atendimento:comanda", pk=pk)
+
+
+@login_required
+@require_POST
+def fechar_comanda(request, pk):
+    with transaction.atomic():
+        comanda = get_object_or_404(Comanda.objects.select_for_update(), pk=pk)
+        if comanda.status != Comanda.Status.ABERTA:
+            messages.error(request, "A comanda já está encerrada.")
+        elif not comanda.itens.exclude(status_producao=ComandaItem.StatusProducao.CANCELADO).exists():
+            messages.error(request, "Adicione pelo menos um item válido antes de encerrar.")
+        elif comanda.saldo > 0:
+            messages.error(request, f"Ainda há saldo de R$ {comanda.saldo:.2f} a receber.")
+        elif comanda.itens.exclude(status_producao=ComandaItem.StatusProducao.CANCELADO).exclude(
+            status_producao=ComandaItem.StatusProducao.PRONTO
+        ).exists():
+            messages.error(request, "A comanda só pode ser encerrada depois que todos os itens ficarem prontos.")
+        else:
+            comanda.status = Comanda.Status.FECHADA
+            comanda.fechada_em = timezone.now()
+            comanda.atualizado_por = request.user
+            comanda.save(update_fields=["status", "fechada_em", "atualizado_por", "atualizado_em"])
+            messages.success(request, "Comanda encerrada.")
     return redirect("atendimento:comanda", pk=pk)
 
 
@@ -183,122 +196,116 @@ def cozinha(request):
     itens = ComandaItem.objects.filter(
         comanda__status=Comanda.Status.ABERTA,
         status_producao__in=[ComandaItem.StatusProducao.PENDENTE, ComandaItem.StatusProducao.ENVIADO],
-    ).select_related("comanda", "comanda__mesa").prefetch_related("adicionais")
+        produto__vai_para_cozinha=True,
+    ).select_related("comanda", "comanda__mesa", "produto").prefetch_related("adicionais")
     return render(request, "atendimento/cozinha.html", {"itens": itens})
 
 
 @login_required
 @require_POST
-def atualizar_producao(request, item_id):
-    item = get_object_or_404(
-        ComandaItem.objects.select_related("comanda"),
-        pk=item_id,
-        comanda__status=Comanda.Status.ABERTA,
-    )
-    novo_status = request.POST.get("status")
-    if novo_status not in (ComandaItem.StatusProducao.ENVIADO, ComandaItem.StatusProducao.PRONTO):
-        messages.error(request, "Estado de produção inválido.")
-    elif novo_status == ComandaItem.StatusProducao.PRONTO and item.status_producao != ComandaItem.StatusProducao.ENVIADO:
-        messages.error(request, "Envie o item à cozinha antes de marcá-lo como pronto.")
-    else:
-        item.status_producao = novo_status
-        item.atualizado_por = request.user
-        item.save(update_fields=["status_producao", "atualizado_por", "atualizado_em"])
-        messages.success(request, "Estado do pedido atualizado.")
+def atualizar_cozinha(request, item_id, status):
+    permitidos = {ComandaItem.StatusProducao.ENVIADO, ComandaItem.StatusProducao.PRONTO}
+    if status not in permitidos:
+        raise Http404
+    with transaction.atomic():
+        item = get_object_or_404(ComandaItem.objects.select_for_update(), pk=item_id)
+        if item.comanda.status != Comanda.Status.ABERTA or item.status_producao == ComandaItem.StatusProducao.CANCELADO:
+            messages.error(request, "Este item não está disponível para atualização.")
+        else:
+            transicoes = {
+                ComandaItem.StatusProducao.PENDENTE: ComandaItem.StatusProducao.ENVIADO,
+                ComandaItem.StatusProducao.ENVIADO: ComandaItem.StatusProducao.PRONTO,
+            }
+            if transicoes.get(item.status_producao) != status:
+                messages.error(request, "Transição de status inválida para este item.")
+                return redirect("atendimento:cozinha")
+            item.status_producao = status
+            item.atualizado_por = request.user
+            item.save(update_fields=["status_producao", "atualizado_por", "atualizado_em"])
+            messages.success(request, "Status atualizado na cozinha.")
     return redirect("atendimento:cozinha")
 
 
 @login_required
 def caixa(request):
-    caixa_atual = Caixa.objects.filter(status=Caixa.Status.ABERTO).first()
-    historico = Caixa.objects.order_by("-aberto_em")[:15]
-    if request.method == "POST":
-        acao = request.POST.get("acao")
-        if acao == "abrir":
-            try:
-                inicial = Decimal(request.POST.get("valor_inicial", "0").replace(",", "."))
-            except (InvalidOperation, AttributeError):
-                inicial = Decimal("-1")
-            if inicial < 0:
-                messages.error(request, "Informe um valor inicial válido, igual ou maior que zero.")
-            elif Caixa.objects.filter(status=Caixa.Status.ABERTO).exists():
-                messages.error(request, "Já existe um caixa aberto.")
-            else:
-                try:
-                    with transaction.atomic():
-                        caixa_atual = Caixa.objects.create(
-                            valor_inicial=inicial,
-                            criado_por=request.user,
-                            atualizado_por=request.user,
-                        )
-                except Exception:
-                    messages.error(request, "Não foi possível abrir o caixa. Atualize a página e tente novamente.")
-                else:
-                    messages.success(request, "Caixa aberto.")
-                    return redirect("atendimento:caixa")
-        elif acao == "movimentar" and caixa_atual:
-            tipo = request.POST.get("tipo")
-            descricao = request.POST.get("descricao", "").strip()
-            try:
-                valor = Decimal(request.POST.get("valor", "").replace(",", "."))
-            except (InvalidOperation, AttributeError):
-                valor = Decimal("0")
-            if tipo not in MovimentacaoCaixa.Tipo.values or not descricao or valor <= 0:
-                messages.error(request, "Preencha corretamente o tipo, a descrição e um valor maior que zero.")
-            else:
-                with transaction.atomic():
-                    caixa_bloqueado = Caixa.objects.select_for_update().get(pk=caixa_atual.pk)
-                    if caixa_bloqueado.status != Caixa.Status.ABERTO:
-                        messages.error(request, "Este caixa já foi fechado.")
-                    else:
-                        MovimentacaoCaixa.objects.create(
-                            caixa=caixa_bloqueado, tipo=tipo, descricao=descricao[:150], valor=valor,
-                            criado_por=request.user, atualizado_por=request.user,
-                        )
-                        messages.success(request, "Movimentação registrada.")
-                        return redirect("atendimento:caixa")
-        elif acao == "fechar" and caixa_atual:
-            try:
-                contado = Decimal(request.POST.get("valor_fechamento", "").replace(",", "."))
-            except (InvalidOperation, AttributeError):
-                contado = Decimal("-1")
-            if contado < 0:
-                messages.error(request, "Informe o valor contado no fechamento, igual ou maior que zero.")
-            else:
-                with transaction.atomic():
-                    caixa_bloqueado = Caixa.objects.select_for_update().get(pk=caixa_atual.pk)
-                    if caixa_bloqueado.status != Caixa.Status.ABERTO:
-                        messages.error(request, "Este caixa já foi fechado.")
-                    else:
-                        caixa_bloqueado.status = Caixa.Status.FECHADO
-                        caixa_bloqueado.fechado_em = timezone.now()
-                        caixa_bloqueado.valor_fechamento = contado
-                        caixa_bloqueado.fechado_por = request.user
-                        caixa_bloqueado.atualizado_por = request.user
-                        caixa_bloqueado.save()
-                        messages.success(request, "Caixa fechado e valor contado registrado.")
-                        return redirect("atendimento:caixa")
-
-    if caixa_atual:
-        pagamentos = Pagamento.objects.filter(caixa=caixa_atual)
-        entradas = MovimentacaoCaixa.objects.filter(caixa=caixa_atual, tipo=MovimentacaoCaixa.Tipo.ENTRADA)
-        saidas = MovimentacaoCaixa.objects.filter(caixa=caixa_atual, tipo=MovimentacaoCaixa.Tipo.SAIDA)
-        recebido = sum((p.valor for p in pagamentos), Decimal("0.00"))
-        total_entradas = sum((m.valor for m in entradas), Decimal("0.00"))
-        total_saidas = sum((m.valor for m in saidas), Decimal("0.00"))
-        esperado = caixa_atual.valor_inicial + recebido + total_entradas - total_saidas
-        movimentos = list(pagamentos.select_related("comanda")) + list(entradas) + list(saidas)
-        movimentos.sort(key=lambda mov: mov.criado_em, reverse=True)
-    else:
-        recebido = total_entradas = total_saidas = esperado = Decimal("0.00")
-        movimentos = []
-
+    aberto = _caixa_aberto()
+    resumo = _total_caixa(aberto) if aberto else None
+    historico = Caixa.objects.filter(status=Caixa.Status.FECHADO)[:10]
+    historico_resumo = [(c, _total_caixa(c)) for c in historico]
     return render(request, "atendimento/caixa.html", {
-        "caixa": caixa_atual,
-        "historico": historico,
-        "recebido": recebido,
-        "total_entradas": total_entradas,
-        "total_saidas": total_saidas,
-        "esperado": esperado,
-        "movimentos": movimentos,
+        "caixa": aberto, "resumo": resumo, "historico": historico_resumo,
+        "movimentacoes": aberto.movimentacoes.all()[:20] if aberto else [],
     })
+
+
+@login_required
+@require_POST
+def abrir_caixa(request):
+    form = AbrirCaixaForm(request.POST)
+    if not form.is_valid():
+        for erro in form.errors.values():
+            messages.error(request, " ".join(erro))
+        return redirect("atendimento:caixa")
+    try:
+        with transaction.atomic():
+            Caixa.objects.create(
+                valor_inicial=form.cleaned_data["valor_inicial"],
+                observacao=form.cleaned_data["observacao"],
+                criado_por=request.user, atualizado_por=request.user,
+            )
+        messages.success(request, "Caixa aberto.")
+    except IntegrityError:
+        messages.error(request, "Já existe um caixa aberto.")
+    return redirect("atendimento:caixa")
+
+
+@login_required
+@require_POST
+def registrar_movimentacao(request):
+    form = MovimentacaoForm(request.POST)
+    if not form.is_valid():
+        for erro in form.errors.values():
+            messages.error(request, " ".join(erro))
+        return redirect("atendimento:caixa")
+    with transaction.atomic():
+        caixa = Caixa.objects.select_for_update().filter(status=Caixa.Status.ABERTO).first()
+        if not caixa:
+            messages.error(request, "Não há caixa aberto.")
+        else:
+            dados = form.cleaned_data
+            MovimentacaoCaixa.objects.create(
+                caixa=caixa, tipo=dados["tipo"], descricao=dados["descricao"], valor=dados["valor"],
+                criado_por=request.user, atualizado_por=request.user,
+            )
+            messages.success(request, "Movimentação registrada.")
+    return redirect("atendimento:caixa")
+
+
+@login_required
+@require_POST
+def fechar_caixa(request):
+    form = FecharCaixaForm(request.POST)
+    if not form.is_valid():
+        for erro in form.errors.values():
+            messages.error(request, " ".join(erro))
+        return redirect("atendimento:caixa")
+    with transaction.atomic():
+        caixa = Caixa.objects.select_for_update().filter(status=Caixa.Status.ABERTO).first()
+        if not caixa:
+            messages.error(request, "Não há caixa aberto.")
+        elif Comanda.objects.filter(status=Comanda.Status.ABERTA, pagamentos__caixa=caixa).distinct().exists():
+            messages.error(request, "Há comandas ainda abertas com pagamentos neste caixa. Conclua-as antes de fechar o caixa.")
+        else:
+            resumo = _total_caixa(caixa)
+            caixa.status = Caixa.Status.FECHADO
+            caixa.fechado_em = timezone.now()
+            caixa.fechado_por = request.user
+            caixa.valor_fechamento = form.cleaned_data["valor_fechamento"]
+            observacao = form.cleaned_data["observacao"].strip()
+            if observacao:
+                caixa.observacao = (caixa.observacao + "\n" + observacao).strip()
+            caixa.atualizado_por = request.user
+            caixa.save(update_fields=["status", "fechado_em", "fechado_por", "valor_fechamento", "observacao", "atualizado_por", "atualizado_em"])
+            diferenca = caixa.valor_fechamento - resumo["esperado"]
+            messages.success(request, f"Caixa fechado. Esperado: R$ {resumo['esperado']:.2f}; contado: R$ {caixa.valor_fechamento:.2f}; diferença: R$ {diferenca:.2f}.")
+    return redirect("atendimento:caixa")

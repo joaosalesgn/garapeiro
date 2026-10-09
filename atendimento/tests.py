@@ -5,7 +5,8 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from .models import (
-    Caixa, Categoria, Comanda, ComandaItem, Mesa, Pagamento, Produto,
+    Caixa, Categoria, Comanda, ComandaItem, ItemAdicional,
+    Mesa, Pagamento, Produto, Adicional,
 )
 
 
@@ -33,16 +34,32 @@ class CadastrosEAtendimentoTests(TestCase):
     def test_comanda_calcula_total_saldo_e_pagamento(self):
         caixa = Caixa.objects.create(criado_por=self.user, valor_inicial="100.00")
         comanda = Comanda.objects.create(criado_por=self.user)
-        ComandaItem.objects.create(
+        item = ComandaItem.objects.create(
             comanda=comanda, produto=self.produto, produto_nome=self.produto.nome,
             quantidade=2, preco_unitario="12.50",
         )
-        self.assertEqual(comanda.total, Decimal("25.00"))
+        adicional = Adicional.objects.create(nome="Queijo extra", preco="2.00")
+        ItemAdicional.objects.create(item=item, adicional=adicional, adicional_nome=adicional.nome, quantidade=1, preco_unitario="2.00")
+        self.assertEqual(comanda.total, Decimal("27.00"))
         Pagamento.objects.create(comanda=comanda, caixa=caixa, forma=Pagamento.Forma.PIX, valor="10.00")
         self.assertEqual(comanda.total_pago, Decimal("10.00"))
-        self.assertEqual(comanda.saldo, Decimal("15.00"))
+        self.assertEqual(comanda.saldo, Decimal("17.00"))
 
     def test_apenas_um_caixa_pode_ficar_aberto(self):
         Caixa.objects.create(criado_por=self.user)
         with self.assertRaises(IntegrityError), transaction.atomic():
             Caixa.objects.create(criado_por=self.user)
+
+    def test_cancelar_item_preserva_historico_e_recalcula_total_sem_adicional(self):
+        comanda = Comanda.objects.create(criado_por=self.user)
+        item = ComandaItem.objects.create(
+            comanda=comanda, produto=self.produto, produto_nome=self.produto.nome,
+            quantidade=1, preco_unitario="12.50",
+        )
+        adicional = Adicional.objects.create(nome="Queijo extra", preco="2.00")
+        ItemAdicional.objects.create(item=item, adicional=adicional, adicional_nome=adicional.nome, preco_unitario="2.00")
+        item.status_producao = ComandaItem.StatusProducao.CANCELADO
+        item.save()
+        item.refresh_from_db()
+        self.assertTrue(ItemAdicional.objects.filter(item=item).exists())
+        self.assertEqual(comanda.total, Decimal("0.00"))
