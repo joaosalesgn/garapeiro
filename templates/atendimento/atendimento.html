@@ -1,0 +1,21 @@
+{% extends "atendimento/base.html" %}
+{% block title %}Atendimento · Garapeiro{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Atendimento</h1><div class="muted">Abra uma comanda e acompanhe os pedidos em andamento.</div></div><div>{% if caixa %}<span class="pill">Caixa aberto</span>{% else %}<span class="pill red">Caixa fechado</span>{% endif %}</div></div>
+<div class="grid">
+  <section class="card span-4"><h2>Nova comanda</h2>
+    {% if not caixa %}<div class="notice warning">O caixa está fechado. Você pode abrir comandas, mas precisará abrir o caixa para registrar pagamentos. <a href="{% url 'atendimento:caixa' %}">Abrir caixa</a></div>{% endif %}
+    <form method="post">{% csrf_token %}
+      {% if form.non_field_errors %}<div class="notice error">{{ form.non_field_errors|striptags }}</div>{% endif %}
+      <div class="form-grid">
+      {% for field in form %}<div class="field {% if field.name == 'observacao' %}full{% endif %}"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="errors">{{ field.errors|striptags }}</div>{% endif %}</div>{% endfor %}
+      </div>
+      <div class="footer-note">Para atendimento no salão, selecione uma mesa. Balcão e entrega não exigem mesa.</div>
+      <div class="actions" style="margin-top:15px"><button class="btn" type="submit">Abrir comanda</button></div>
+    </form>
+  </section>
+  <section class="card span-8"><h2>Comandas abertas <span class="pill">{{ comandas|length }}</span></h2>
+    {% if comandas %}<div class="list">{% for c in comandas %}<a class="list-row" href="{% url 'atendimento:comanda' c.pk %}"><span><strong>Comanda #{{ c.pk }}</strong><br><span class="muted">{{ c.get_canal_display }}{% if c.mesa %} · Mesa {{ c.mesa.numero }}{% endif %}{% if c.cliente %} · {{ c.cliente.nome }}{% endif %} · {{ c.criado_em|date:'d/m H:i' }}</span></span><span class="right"><span class="price">R$ {{ c.total|floatformat:2 }}</span><br><span class="pill amber">Saldo R$ {{ c.saldo|floatformat:2 }}</span></span></a>{% endfor %}</div>{% else %}<div class="empty">Nenhuma comanda aberta no momento.</div>{% endif %}
+  </section>
+</div>
+{% endblock %}
