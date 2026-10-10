@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import Adicional, Caixa, Categoria, Comanda, ComandaItem, ItemAdicional, Mesa, MovimentacaoCaixa, Pagamento, Produto
+from .models import Adicional, Caixa, Categoria, Comanda, ComandaItem, ItemAdicional, Mesa, MovimentacaoCaixa, Pagamento, Produto, ProdutoAdicional
 
 
 class OperacaoAtendimentoTests(TestCase):
@@ -45,6 +45,43 @@ class OperacaoAtendimentoTests(TestCase):
         self.client.post(url, {"forma": Pagamento.Forma.PIX, "valor": "25.00", "referencia": ""})
         self.assertEqual(Pagamento.objects.get().caixa, caixa)
         self.assertEqual(comanda.saldo, Decimal("0.00"))
+
+
+    def test_adicionais_vinculados_aparecem_e_sao_salvos_na_comanda(self):
+        adicional = Adicional.objects.create(nome="Queijo extra", preco=Decimal("2.00"))
+        ProdutoAdicional.objects.create(produto=self.produto, adicional=adicional)
+        url = reverse("atendimento:comanda", kwargs={"pk": Comanda.objects.create(mesa=self.mesa).pk})
+        resposta = self.client.get(url, {"produto": self.produto.pk})
+        self.assertContains(resposta, "Queijo extra — R$ 2.00")
+        comanda = Comanda.objects.get()
+        self.client.post(reverse("atendimento:adicionar_item", kwargs={"pk": comanda.pk}), {
+            "produto": self.produto.pk, "quantidade": "1", "observacao": "", "adicionais": [adicional.pk],
+        })
+        self.assertEqual(ItemAdicional.objects.get().adicional, adicional)
+        self.assertEqual(comanda.total, Decimal("14.50"))
+
+    def test_pagamentos_parciais_quitam_e_encerram_comanda_automaticamente(self):
+        caixa = Caixa.objects.create(criado_por=self.user)
+        comanda = Comanda.objects.create(mesa=self.mesa, criado_por=self.user)
+        item = ComandaItem.objects.create(
+            comanda=comanda, produto=self.produto, produto_nome=self.produto.nome,
+            quantidade=1, preco_unitario=self.produto.preco, status_producao=ComandaItem.StatusProducao.PENDENTE,
+        )
+        url = reverse("atendimento:registrar_pagamento", kwargs={"pk": comanda.pk})
+        resposta = self.client.post(url, {"forma": Pagamento.Forma.PIX, "valor": "5.00", "referencia": ""})
+        self.assertRedirects(resposta, reverse("atendimento:comanda", kwargs={"pk": comanda.pk}))
+        comanda.refresh_from_db()
+        self.assertEqual(comanda.status, Comanda.Status.ABERTA)
+        self.assertEqual(comanda.saldo, Decimal("7.50"))
+        resposta = self.client.post(url, {"forma": Pagamento.Forma.DINHEIRO, "valor": "7.50", "referencia": ""})
+        self.assertRedirects(resposta, reverse("atendimento:inicio"))
+        comanda.refresh_from_db()
+        self.assertEqual(comanda.status, Comanda.Status.FECHADA)
+        self.assertIsNotNone(comanda.fechada_em)
+        self.assertEqual(comanda.total_pago, Decimal("12.50"))
+        self.assertEqual(Pagamento.objects.filter(caixa=caixa).count(), 2)
+        # O item permanece acessível à cozinha mesmo após a quitação automática.
+        self.assertContains(self.client.get(reverse("atendimento:cozinha")), self.produto.nome)
 
     def test_item_cancelado_e_adicional_preservados_mas_excluidos_do_total(self):
         comanda = Comanda.objects.create(mesa=self.mesa, criado_por=self.user)
@@ -122,13 +159,13 @@ class LoginEPermissoesTests(TestCase):
     def setUp(self):
         from django.contrib.auth.models import Group, Permission
         from django.contrib.contenttypes.models import ContentType
-        from .models import Comanda, ComandaItem
+        from .models import Comanda, ComandaItem, MovimentacaoCaixa
 
         self.user = get_user_model().objects.create_user(username="atendente", password="senha-atendente-123")
         grupo = Group.objects.create(name="Atendente e cozinha")
         permissoes = Permission.objects.filter(
-            content_type__in=ContentType.objects.get_for_models(Comanda, ComandaItem).values()
-        ).filter(codename__in=["view_comanda", "add_comanda", "view_comandaitem", "change_comandaitem"])
+            content_type__in=ContentType.objects.get_for_models(Comanda, ComandaItem, MovimentacaoCaixa).values()
+        ).filter(codename__in=["view_comanda", "add_comanda", "view_comandaitem", "change_comandaitem", "add_movimentacaocaixa"])
         grupo.permissions.set(permissoes)
         self.user.groups.add(grupo)
 
@@ -154,6 +191,22 @@ class LoginEPermissoesTests(TestCase):
         resposta = self.client.post(reverse("atendimento:abrir_caixa"), {"valor_inicial": "50.00"})
         self.assertEqual(resposta.status_code, 403)
         self.assertEqual(Caixa.objects.count(), 0)
+
+
+    def test_atendente_lanca_movimentacao_na_tela_inicial_sem_acesso_ao_caixa(self):
+        self.client.login(username="atendente", password="senha-atendente-123")
+        caixa = Caixa.objects.create(valor_inicial=Decimal("20.00"))
+        resposta = self.client.get(reverse("atendimento:inicio"))
+        self.assertContains(resposta, "Movimentação avulsa")
+        self.assertContains(resposta, "Lance uma entrada")
+        resposta = self.client.post(reverse("atendimento:registrar_movimentacao"), {
+            "origem": "inicio", "tipo": "SAIDA", "descricao": "Conta de água", "valor": "8.50",
+        })
+        self.assertRedirects(resposta, reverse("atendimento:inicio"))
+        movimentacao = MovimentacaoCaixa.objects.get()
+        self.assertEqual(movimentacao.caixa, caixa)
+        self.assertEqual(movimentacao.valor, Decimal("8.50"))
+        self.assertEqual(self.client.get(reverse("atendimento:caixa")).status_code, 403)
 
     def test_logout_somente_post_e_encaminha_para_login(self):
         self.client.login(username="atendente", password="senha-atendente-123")

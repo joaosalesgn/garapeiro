@@ -26,10 +26,18 @@ class NovaComandaForm(forms.Form):
         return dados
 
 
+class AdicionalChoiceField(forms.ModelMultipleChoiceField):
+    def label_from_instance(self, obj):
+        return f"{obj.nome} — R$ {obj.preco:.2f}"
+
+
 class AdicionarItemForm(forms.Form):
     produto = forms.ModelChoiceField(queryset=Produto.objects.filter(ativo=True).select_related("categoria"))
     quantidade = forms.IntegerField(min_value=1, max_value=999, initial=1)
-    adicionais = forms.ModelMultipleChoiceField(queryset=Adicional.objects.none(), required=False)
+    adicionais = AdicionalChoiceField(
+        queryset=Adicional.objects.none(), required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
     observacao = forms.CharField(required=False, max_length=250)
 
     def __init__(self, *args, **kwargs):

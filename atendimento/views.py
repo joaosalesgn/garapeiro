@@ -8,6 +8,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -69,6 +70,9 @@ def inicio(request):
         "pode_cozinha": pode_cozinha,
         "pode_caixa": pode_caixa,
         "pode_abrir_comanda": request.user.has_perm("atendimento.add_comanda"),
+        "pode_movimentar": request.user.has_perm("atendimento.add_movimentacaocaixa"),
+        "movimentacao_form": MovimentacaoForm() if request.user.has_perm("atendimento.add_movimentacaocaixa") else None,
+        "caixa_disponivel": _caixa_aberto() is not None if request.user.has_perm("atendimento.add_movimentacaocaixa") else False,
     })
 
 
@@ -191,7 +195,14 @@ def registrar_pagamento(request, pk):
                 valor=form.cleaned_data["valor"], referencia=form.cleaned_data["referencia"],
                 criado_por=request.user, atualizado_por=request.user,
             )
-            messages.success(request, "Pagamento registrado no caixa aberto.")
+            if comanda.saldo == 0:
+                comanda.status = Comanda.Status.FECHADA
+                comanda.fechada_em = timezone.now()
+                comanda.atualizado_por = request.user
+                comanda.save(update_fields=["status", "fechada_em", "atualizado_por", "atualizado_em"])
+                messages.success(request, "Pagamento quitado. Comanda encerrada automaticamente.")
+                return redirect("atendimento:inicio")
+            messages.success(request, f"Pagamento registrado. Saldo restante: R$ {comanda.saldo:.2f}.")
     return redirect("atendimento:comanda", pk=pk)
 
 
@@ -224,7 +235,7 @@ def fechar_comanda(request, pk):
 @permission_required("atendimento.view_comandaitem", raise_exception=True)
 def cozinha(request):
     itens = ComandaItem.objects.filter(
-        comanda__status=Comanda.Status.ABERTA,
+        comanda__status__in=[Comanda.Status.ABERTA, Comanda.Status.FECHADA],
         status_producao__in=[ComandaItem.StatusProducao.PENDENTE, ComandaItem.StatusProducao.ENVIADO],
         produto__vai_para_cozinha=True,
     ).select_related("comanda", "comanda__mesa", "produto").prefetch_related("adicionais")
@@ -240,7 +251,7 @@ def atualizar_cozinha(request, item_id, status):
         raise Http404
     with transaction.atomic():
         item = get_object_or_404(ComandaItem.objects.select_for_update(), pk=item_id)
-        if item.comanda.status != Comanda.Status.ABERTA or item.status_producao == ComandaItem.StatusProducao.CANCELADO:
+        if item.comanda.status not in {Comanda.Status.ABERTA, Comanda.Status.FECHADA} or item.status_producao == ComandaItem.StatusProducao.CANCELADO:
             messages.error(request, "Este item não está disponível para atualização.")
         else:
             transicoes = {
@@ -296,15 +307,16 @@ def abrir_caixa(request):
 @require_POST
 @permission_required("atendimento.add_movimentacaocaixa", raise_exception=True)
 def registrar_movimentacao(request):
+    destino = "atendimento:inicio" if request.POST.get("origem") == "inicio" else "atendimento:caixa"
     form = MovimentacaoForm(request.POST)
     if not form.is_valid():
         for erro in form.errors.values():
             messages.error(request, " ".join(erro))
-        return redirect("atendimento:caixa")
+        return redirect(destino)
     with transaction.atomic():
         caixa = Caixa.objects.select_for_update().filter(status=Caixa.Status.ABERTO).first()
         if not caixa:
-            messages.error(request, "Não há caixa aberto.")
+            messages.error(request, "Não há caixa aberto. Peça ao responsável para abrir o caixa antes de lançar a movimentação.")
         else:
             dados = form.cleaned_data
             MovimentacaoCaixa.objects.create(
@@ -312,7 +324,7 @@ def registrar_movimentacao(request):
                 criado_por=request.user, atualizado_por=request.user,
             )
             messages.success(request, "Movimentação registrada.")
-    return redirect("atendimento:caixa")
+    return redirect(destino)
 
 
 @login_required
