@@ -22,7 +22,7 @@ from .models import (
 
 
 class LoginSistemaView(auth_views.LoginView):
-    template_name = "atendimento/login.html"
+    template_name = "login.html"
     redirect_authenticated_user = True
 
 
@@ -58,7 +58,7 @@ def inicio(request):
         Comanda.objects.filter(status=Comanda.Status.ABERTA).select_related("mesa", "cliente")
         if pode_atendimento else Comanda.objects.none()
     )
-    return render(request, "atendimento/inicio.html", {
+    return render(request, "inicio.html", {
         "comandas": comandas_abertas[:12], "total_comandas": comandas_abertas.count(),
         "itens_cozinha": ComandaItem.objects.filter(
             status_producao=ComandaItem.StatusProducao.ENVIADO,
@@ -77,7 +77,7 @@ def inicio(request):
 def comandas(request):
     abertas = Comanda.objects.filter(status=Comanda.Status.ABERTA).select_related("mesa", "cliente")
     encerradas = Comanda.objects.exclude(status=Comanda.Status.ABERTA).select_related("mesa", "cliente")[:30]
-    return render(request, "atendimento/comandas.html", {"abertas": abertas, "encerradas": encerradas})
+    return render(request, "comandas.html", {"abertas": abertas, "encerradas": encerradas})
 
 
 @login_required
@@ -92,7 +92,7 @@ def nova_comanda(request):
         )
         messages.success(request, f"Comanda #{comanda.pk} aberta.")
         return redirect("atendimento:comanda", pk=comanda.pk)
-    return render(request, "atendimento/formulario.html", {"form": form, "titulo": "Abrir comanda", "voltar": "atendimento:comandas"})
+    return render(request, "formulario.html", {"form": form, "titulo": "Abrir comanda", "voltar": "atendimento:comandas"})
 
 
 @login_required
@@ -102,7 +102,7 @@ def detalhe_comanda(request, pk):
     caixa = _caixa_aberto()
     item_form = AdicionarItemForm(initial={"produto": request.GET.get("produto")} if request.GET.get("produto") else None)
     pagamento_form = PagamentoForm(initial={"valor": max(comanda.saldo, Decimal("0.01"))})
-    return render(request, "atendimento/comanda.html", {
+    return render(request, "comanda.html", {
         "comanda": comanda, "caixa": caixa, "item_form": item_form,
         "pagamento_form": pagamento_form,
     })
@@ -228,7 +228,7 @@ def cozinha(request):
         status_producao__in=[ComandaItem.StatusProducao.PENDENTE, ComandaItem.StatusProducao.ENVIADO],
         produto__vai_para_cozinha=True,
     ).select_related("comanda", "comanda__mesa", "produto").prefetch_related("adicionais")
-    return render(request, "atendimento/cozinha.html", {"itens": itens})
+    return render(request, "cozinha.html", {"itens": itens})
 
 
 @login_required
@@ -264,7 +264,7 @@ def caixa(request):
     resumo = _total_caixa(aberto) if aberto else None
     historico = Caixa.objects.filter(status=Caixa.Status.FECHADO)[:10]
     historico_resumo = [(c, _total_caixa(c)) for c in historico]
-    return render(request, "atendimento/caixa.html", {
+    return render(request, "caixa.html", {
         "caixa": aberto, "resumo": resumo, "historico": historico_resumo,
         "movimentacoes": aberto.movimentacoes.all()[:20] if aberto else [],
     })

@@ -1,4 +1,4 @@
-{% extends 'atendimento/base.html' %}
+{% extends 'base.html' %}
 {% block title %}Comanda #{{ comanda.pk }}{% endblock %}
 {% block content %}
 <div class="toolbar"><a href="{% url 'atendimento:comandas' %}">← Atendimento</a><span class="pill {% if comanda.status != 'ABERTA' %}warn{% endif %}">{{ comanda.get_status_display }}</span></div>
