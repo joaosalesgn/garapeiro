@@ -383,3 +383,22 @@ Após substituir o código, rode:
 As regras impedem mais de uma comanda aberta por mesa na tela, pagamentos superiores ao saldo e fechamento de comanda com valor em aberto. Pagamentos já entram no caixa automaticamente: não os registre novamente como entradas avulsas. O fechamento do caixa registra o valor contado e mostra o saldo esperado para conferência.
 
 O projeto permanece voltado a uso local em um computador. Não exponha o servidor de desenvolvimento à internet; HTTPS e servidor apropriado são necessários antes de acesso pela rede ou uso em produção. Impressão, relatórios e contas financeiras podem ser etapas futuras.
+
+## Permissões dos grupos: atendimento, cozinha e caixa
+
+As permissões são as permissões padrão do Django, no app **Atendimento e cadastros**. As permissões dos modelos novos (comandas, itens, caixa, pagamentos e movimentações) já são criadas pela migração `0007` após `migrate`; não é necessário criar novas tabelas nem trocar o banco para que apareçam. Se não aparecerem no Admin, confira em `showmigrations atendimento` se `0007` está aplicada e execute `migrate` com o servidor parado.
+
+Na administração, abra **Autenticação e autorização → Grupos**, edite o grupo e procure as permissões na lista do app. O nome mostrado costuma começar por “Can view”, “Can add”, “Can change” ou “Can delete”. Ao adicionar novas permissões, salve o grupo e faça o usuário sair e entrar novamente.
+
+Permissões usadas pelas telas do sistema:
+
+- **Atendimento:** `view_comanda` para abrir a lista e detalhes; `add_comanda` para abrir comandas; `add_comandaitem` para adicionar itens; `change_comandaitem` para cancelar itens; `change_comanda` para encerrar a comanda; `add_pagamento` para lançar pagamentos.
+- **Cozinha:** `view_comandaitem` para abrir o painel; `change_comandaitem` para mudar os itens de pendente para enviado e pronto.
+- **Caixa:** `view_caixa` para abrir a tela e mostrar o link; `add_caixa` para abrir; `change_caixa` para fechar; `add_movimentacaocaixa` para registrar entradas e saídas avulsas.
+- **Cadastros:** acesso ao Admin é independente das permissões operacionais e requer usuário autorizado (`is_staff`). Não conceda acesso administrativo apenas para liberar as telas do sistema.
+
+As rotas também verificam permissões no servidor; ocultar um link no menu não é a única proteção. Para um grupo que não deve operar caixa, não marque `view_caixa`, `add_caixa`, `change_caixa` nem `add_movimentacaocaixa`. O pagamento da comanda usa a permissão específica `add_pagamento`.
+
+## Aplicar esta atualização
+
+Feche o servidor e faça cópia de segurança do seu `db.sqlite3`. Substitua os arquivos do projeto pelos desta versão, mas **não copie um banco de dados do pacote**: os usuários, grupos e dados atuais ficam no banco local da empresa. Depois, execute `manage.py migrate`, `manage.py check` e `manage.py test atendimento`. A migração `0007` foi preservada; esta mudança de menu não exige uma nova migração.
