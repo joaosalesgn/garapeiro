@@ -9,7 +9,7 @@ from .models import Adicional, Caixa, Categoria, Comanda, ComandaItem, ItemAdici
 
 class OperacaoAtendimentoTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="atendente", password="teste-seguro")
+        self.user = get_user_model().objects.create_superuser(username="atendente", password="teste-seguro", email="atendente@example.local")
         self.client.force_login(self.user)
         self.categoria = Categoria.objects.create(nome="Lanches")
         self.produto = Produto.objects.create(nome="Pastel de queijo", categoria=self.categoria, preco=Decimal("12.50"), vai_para_cozinha=True)
@@ -116,3 +116,48 @@ class OperacaoAtendimentoTests(TestCase):
     def test_telas_da_cozinha_e_caixa_carregam(self):
         self.assertEqual(self.client.get(reverse("atendimento:cozinha")).status_code, 200)
         self.assertEqual(self.client.get(reverse("atendimento:caixa")).status_code, 200)
+
+
+class LoginEPermissoesTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth.models import Group, Permission
+        from django.contrib.contenttypes.models import ContentType
+        from .models import Comanda, ComandaItem
+
+        self.user = get_user_model().objects.create_user(username="atendente", password="senha-atendente-123")
+        grupo = Group.objects.create(name="Atendente e cozinha")
+        permissoes = Permission.objects.filter(
+            content_type__in=ContentType.objects.get_for_models(Comanda, ComandaItem).values()
+        ).filter(codename__in=["view_comanda", "add_comanda", "view_comandaitem", "change_comandaitem"])
+        grupo.permissions.set(permissoes)
+        self.user.groups.add(grupo)
+
+    def test_login_proprio_autentica_usuario_do_django(self):
+        resposta = self.client.get(reverse("atendimento:login"))
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Entrar no sistema")
+        resposta = self.client.post(reverse("atendimento:login"), {"username": "atendente", "password": "senha-atendente-123"})
+        self.assertRedirects(resposta, reverse("atendimento:inicio"))
+        self.assertEqual(self.client.get(reverse("atendimento:inicio")).status_code, 200)
+
+    def test_menu_e_rotas_respeitam_permissoes_do_grupo(self):
+        self.client.login(username="atendente", password="senha-atendente-123")
+        resposta = self.client.get(reverse("atendimento:inicio"))
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Atendimento")
+        self.assertContains(resposta, "Cozinha")
+        self.assertNotContains(resposta, "Caixa")
+        self.assertNotContains(resposta, "Cadastros")
+        self.assertEqual(self.client.get(reverse("atendimento:comandas")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("atendimento:cozinha")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("atendimento:caixa")).status_code, 403)
+        resposta = self.client.post(reverse("atendimento:abrir_caixa"), {"valor_inicial": "50.00"})
+        self.assertEqual(resposta.status_code, 403)
+        self.assertEqual(Caixa.objects.count(), 0)
+
+    def test_logout_somente_post_e_encaminha_para_login(self):
+        self.client.login(username="atendente", password="senha-atendente-123")
+        resposta = self.client.post(reverse("atendimento:logout"))
+        self.assertRedirects(resposta, reverse("atendimento:login"))
+        resposta = self.client.get(reverse("atendimento:inicio"))
+        self.assertRedirects(resposta, f"{reverse('atendimento:login')}?next={reverse('atendimento:inicio')}")

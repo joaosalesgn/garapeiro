@@ -2,7 +2,7 @@
 {% block title %}Atendimento{% endblock %}
 {% block content %}
 <h1>Atendimento</h1>
-<div class="toolbar"><a class="btn" href="{% url 'atendimento:nova_comanda' %}">＋ Abrir comanda</a></div>
+{% if perms.atendimento.add_comanda %}<div class="toolbar"><a class="btn" href="{% url 'atendimento:nova_comanda' %}">＋ Abrir comanda</a></div>{% endif %}
 <section class="card"><h2>Em andamento</h2>
 {% for comanda in abertas %}<div class="row"><div><strong><a href="{% url 'atendimento:comanda' comanda.pk %}">Comanda #{{ comanda.pk }}</a></strong><div class="subtle">{{ comanda.get_canal_display }}{% if comanda.mesa %} · Mesa {{ comanda.mesa.numero }}{% endif %}{% if comanda.cliente %} · {{ comanda.cliente.nome }}{% endif %} · {{ comanda.criado_em|date:'d/m H:i' }}</div></div><div><span class="pill">Aberta</span> <strong>R$ {{ comanda.total|floatformat:2 }}</strong></div></div>
 {% empty %}<div class="empty">Nenhuma comanda aberta. Use “Abrir comanda” para começar.</div>{% endfor %}</section>

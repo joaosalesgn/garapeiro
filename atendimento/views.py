@@ -1,7 +1,9 @@
 from decimal import Decimal
 
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth import views as auth_views
+from django.contrib.auth import logout as auth_logout
+from django.contrib.auth.decorators import login_required, permission_required
 from django.db import IntegrityError, transaction
 from django.db.models import Sum
 from django.http import Http404
@@ -17,6 +19,17 @@ from .models import (
     Caixa, Comanda, ComandaItem, ItemAdicional, MovimentacaoCaixa, Pagamento
 )
 
+
+
+class LoginSistemaView(auth_views.LoginView):
+    template_name = "atendimento/login.html"
+    redirect_authenticated_user = True
+
+
+@require_POST
+def logout_sistema(request):
+    auth_logout(request)
+    return redirect("atendimento:login")
 
 def _caixa_aberto():
     return Caixa.objects.filter(status=Caixa.Status.ABERTO).first()
@@ -38,19 +51,29 @@ def _total_caixa(caixa):
 
 @login_required
 def inicio(request):
-    comandas_abertas = Comanda.objects.filter(status=Comanda.Status.ABERTA).select_related("mesa", "cliente")
-    caixa = _caixa_aberto()
+    pode_atendimento = request.user.has_perm("atendimento.view_comanda")
+    pode_cozinha = request.user.has_perm("atendimento.view_comandaitem")
+    pode_caixa = request.user.has_perm("atendimento.view_caixa")
+    comandas_abertas = (
+        Comanda.objects.filter(status=Comanda.Status.ABERTA).select_related("mesa", "cliente")
+        if pode_atendimento else Comanda.objects.none()
+    )
     return render(request, "atendimento/inicio.html", {
-        "comandas": comandas_abertas[:12], "caixa": caixa,
-        "total_comandas": comandas_abertas.count(),
+        "comandas": comandas_abertas[:12], "total_comandas": comandas_abertas.count(),
         "itens_cozinha": ComandaItem.objects.filter(
             status_producao=ComandaItem.StatusProducao.ENVIADO,
             comanda__status=Comanda.Status.ABERTA,
-        ).count(),
+        ).count() if pode_cozinha else 0,
+        "caixa": _caixa_aberto() if pode_caixa else None,
+        "pode_atendimento": pode_atendimento,
+        "pode_cozinha": pode_cozinha,
+        "pode_caixa": pode_caixa,
+        "pode_abrir_comanda": request.user.has_perm("atendimento.add_comanda"),
     })
 
 
 @login_required
+@permission_required("atendimento.view_comanda", raise_exception=True)
 def comandas(request):
     abertas = Comanda.objects.filter(status=Comanda.Status.ABERTA).select_related("mesa", "cliente")
     encerradas = Comanda.objects.exclude(status=Comanda.Status.ABERTA).select_related("mesa", "cliente")[:30]
@@ -58,6 +81,7 @@ def comandas(request):
 
 
 @login_required
+@permission_required("atendimento.add_comanda", raise_exception=True)
 def nova_comanda(request):
     form = NovaComandaForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
@@ -72,6 +96,7 @@ def nova_comanda(request):
 
 
 @login_required
+@permission_required("atendimento.view_comanda", raise_exception=True)
 def detalhe_comanda(request, pk):
     comanda = get_object_or_404(Comanda.objects.select_related("mesa", "cliente"), pk=pk)
     caixa = _caixa_aberto()
@@ -85,6 +110,7 @@ def detalhe_comanda(request, pk):
 
 @login_required
 @require_POST
+@permission_required("atendimento.add_comandaitem", raise_exception=True)
 def adicionar_item(request, pk):
     comanda = get_object_or_404(Comanda, pk=pk)
     if comanda.status != Comanda.Status.ABERTA:
@@ -118,6 +144,7 @@ def adicionar_item(request, pk):
 
 @login_required
 @require_POST
+@permission_required("atendimento.change_comandaitem", raise_exception=True)
 def cancelar_item(request, pk, item_id):
     with transaction.atomic():
         comanda = get_object_or_404(Comanda.objects.select_for_update(), pk=pk)
@@ -140,6 +167,7 @@ def cancelar_item(request, pk, item_id):
 
 @login_required
 @require_POST
+@permission_required("atendimento.add_pagamento", raise_exception=True)
 def registrar_pagamento(request, pk):
     form = PagamentoForm(request.POST)
     if not form.is_valid():
@@ -169,6 +197,7 @@ def registrar_pagamento(request, pk):
 
 @login_required
 @require_POST
+@permission_required("atendimento.change_comanda", raise_exception=True)
 def fechar_comanda(request, pk):
     with transaction.atomic():
         comanda = get_object_or_404(Comanda.objects.select_for_update(), pk=pk)
@@ -192,6 +221,7 @@ def fechar_comanda(request, pk):
 
 
 @login_required
+@permission_required("atendimento.view_comandaitem", raise_exception=True)
 def cozinha(request):
     itens = ComandaItem.objects.filter(
         comanda__status=Comanda.Status.ABERTA,
@@ -203,6 +233,7 @@ def cozinha(request):
 
 @login_required
 @require_POST
+@permission_required("atendimento.change_comandaitem", raise_exception=True)
 def atualizar_cozinha(request, item_id, status):
     permitidos = {ComandaItem.StatusProducao.ENVIADO, ComandaItem.StatusProducao.PRONTO}
     if status not in permitidos:
@@ -227,6 +258,7 @@ def atualizar_cozinha(request, item_id, status):
 
 
 @login_required
+@permission_required("atendimento.view_caixa", raise_exception=True)
 def caixa(request):
     aberto = _caixa_aberto()
     resumo = _total_caixa(aberto) if aberto else None
@@ -240,6 +272,7 @@ def caixa(request):
 
 @login_required
 @require_POST
+@permission_required("atendimento.add_caixa", raise_exception=True)
 def abrir_caixa(request):
     form = AbrirCaixaForm(request.POST)
     if not form.is_valid():
@@ -261,6 +294,7 @@ def abrir_caixa(request):
 
 @login_required
 @require_POST
+@permission_required("atendimento.add_movimentacaocaixa", raise_exception=True)
 def registrar_movimentacao(request):
     form = MovimentacaoForm(request.POST)
     if not form.is_valid():
@@ -283,6 +317,7 @@ def registrar_movimentacao(request):
 
 @login_required
 @require_POST
+@permission_required("atendimento.change_caixa", raise_exception=True)
 def fechar_caixa(request):
     form = FecharCaixaForm(request.POST)
     if not form.is_valid():

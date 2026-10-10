@@ -5,6 +5,8 @@ from . import views
 app_name = "atendimento"
 
 urlpatterns = [
+    path("login/", views.LoginSistemaView.as_view(), name="login"),
+    path("logout/", views.logout_sistema, name="logout"),
     path("", views.inicio, name="inicio"),
     path("comandas/", views.comandas, name="comandas"),
     path("comandas/nova/", views.nova_comanda, name="nova_comanda"),

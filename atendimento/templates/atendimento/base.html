@@ -11,7 +11,17 @@
   </style>
 </head>
 <body>
-<header><strong>Garapeiro</strong><nav><a href="{% url 'atendimento:inicio' %}">Início</a><a href="{% url 'atendimento:comandas' %}">Atendimento</a><a href="{% url 'atendimento:cozinha' %}">Cozinha</a><a href="{% url 'atendimento:caixa' %}">Caixa</a><a href="{% url 'admin:index' %}">Cadastros</a></nav></header>
+<header><strong>Garapeiro</strong><nav>
+{% if user.is_authenticated %}
+<a href="{% url 'atendimento:inicio' %}">Início</a>
+{% if perms.atendimento.view_comanda %}<a href="{% url 'atendimento:comandas' %}">Atendimento</a>{% endif %}
+{% if perms.atendimento.view_comandaitem %}<a href="{% url 'atendimento:cozinha' %}">Cozinha</a>{% endif %}
+{% if perms.atendimento.view_caixa %}<a href="{% url 'atendimento:caixa' %}">Caixa</a>{% endif %}
+{% if user.is_staff %}<a href="{% url 'admin:index' %}">Cadastros</a>{% endif %}
+<span class="subtle" style="color:#d5ddcf">{{ user.get_short_name|default:user.username }}</span>
+<form class="inline" method="post" action="{% url 'atendimento:logout' %}">{% csrf_token %}<button class="secondary" type="submit">Sair</button></form>
+{% else %}<a href="{% url 'atendimento:login' %}">Entrar</a>{% endif %}
+</nav></header>
 <main class="wrap">
   {% if messages %}<ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>{% endif %}
   {% block content %}{% endblock %}
