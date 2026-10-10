@@ -57,9 +57,18 @@ class CadastrosEAtendimentoTests(TestCase):
             quantidade=1, preco_unitario="12.50",
         )
         adicional = Adicional.objects.create(nome="Queijo extra", preco="2.00")
-        ItemAdicional.objects.create(item=item, adicional=adicional, adicional_nome=adicional.nome, preco_unitario="2.00")
+        ItemAdicional.objects.create(item=item, adicional=adicional, adicional_nome=adicional.nome, quantidade=1, preco_unitario="2.00")
         item.status_producao = ComandaItem.StatusProducao.CANCELADO
         item.save()
         item.refresh_from_db()
         self.assertTrue(ItemAdicional.objects.filter(item=item).exists())
         self.assertEqual(comanda.total, Decimal("0.00"))
+
+    def test_produto_exibe_categoria_no_seletor(self):
+        from .forms import AdicionarItemForm
+
+        form = AdicionarItemForm()
+        self.assertEqual(
+            form.fields["produto"].label_from_instance(self.produto),
+            "Pastéis — Pastel de queijo",
+        )
