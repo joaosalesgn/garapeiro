@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load l10n %}
 {% block title %}
     Comanda #{{ comanda.pk }}
 {% endblock %}
@@ -95,9 +96,42 @@
                         {{ item_form.non_field_errors }}
                         {% for field in item_form %}
                             {% if field.name != 'adicionais' %}
-                                <div class="field">
-                                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}
-                                </div>
+                                {% if field.name == 'produto' %}
+                                    <div class="field product-field">
+                                        <label id="{{ field.id_for_label }}_label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                        <div class="product-picker" data-product-picker>
+                                            {{ field }}
+                                            <button class="product-picker-trigger" type="button" aria-labelledby="{{ field.id_for_label }}_label" aria-haspopup="listbox" aria-expanded="false" data-picker-trigger>
+                                                <span data-picker-current aria-live="polite">Selecione um produto</span>
+                                                <span class="product-picker-chevron" aria-hidden="true">▾</span>
+                                            </button>
+                                            <div class="product-picker-panel" data-picker-panel hidden>
+                                                <input class="product-picker-search" type="search" placeholder="Buscar produto ou categoria…" autocomplete="off" aria-label="Buscar produto" data-picker-search>
+                                                <div class="product-picker-heading" aria-hidden="true">
+                                                    <span>Produto</span><span>Categoria</span><span>Preço</span>
+                                                </div>
+                                                <div class="product-picker-options" role="listbox" aria-label="Produtos disponíveis" data-picker-options>
+                                                    {% for produto in field.field.queryset %}
+                                                        <button class="product-picker-option" type="button" role="option" aria-selected="false" data-value="{{ produto.pk }}" data-search="{{ produto.nome|lower }} {{ produto.categoria.nome|default:'Sem categoria'|lower }}">
+                                                            <span class="product-option-name">{{ produto.nome }}</span>
+                                                            <span class="product-option-category">{{ produto.categoria.nome|default:'Sem categoria' }}</span>
+                                                            <span class="product-option-price">R$ {{ produto.preco|floatformat:2|localize }}</span>
+                                                        </button>
+                                                    {% empty %}
+                                                        <div class="product-picker-empty-state">Nenhum produto disponível.</div>
+                                                    {% endfor %}
+                                                </div>
+                                                <div class="product-picker-empty-state" data-picker-no-results hidden>Nenhum produto encontrado.</div>
+                                            </div>
+                                            <div class="product-picker-error" role="alert" data-picker-error hidden>Selecione um produto para continuar.</div>
+                                        </div>
+                                        {{ field.errors }}
+                                    </div>
+                                {% else %}
+                                    <div class="field">
+                                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}
+                                    </div>
+                                {% endif %}
                             {% endif %}
                         {% endfor %}
                         <div class="field">
@@ -182,7 +216,7 @@
                                     Selecione um cliente
                                 </option>
                                 {% for cliente in clientes %}
-                                    <option value="{{ cliente.pk }}" {% if comanda.cliente_id==cliente.pk %}selected{% endif %}>
+                                    <option value="{{ cliente.pk }}" {% if comanda.cliente_id == cliente.pk %}selected{% endif %}>
                                         {{ cliente.nome }}
                                     </option>
                                 {% endfor %}
@@ -234,6 +268,109 @@
         })
         .catch(() => { adicionais.innerHTML = '<span class="subtle">Não foi possível carregar os adicionais. Tente novamente.</span>'; });
     });
+
+    const picker = document.querySelector('[data-product-picker]');
+    if (!picker) return;
+    const select = picker.querySelector('select');
+    const trigger = picker.querySelector('[data-picker-trigger]');
+    const panel = picker.querySelector('[data-picker-panel]');
+    const search = picker.querySelector('[data-picker-search]');
+    const current = picker.querySelector('[data-picker-current]');
+    const options = Array.from(picker.querySelectorAll('.product-picker-option'));
+    const noResults = picker.querySelector('[data-picker-no-results]');
+    const error = picker.querySelector('[data-picker-error]');
+    const form = picker.closest('form');
+
+    picker.classList.add('is-enhanced');
+    select.required = false;
+
+    function closePicker() {
+      panel.hidden = true;
+      trigger.setAttribute('aria-expanded', 'false');
+    }
+
+    function openPicker() {
+      panel.hidden = false;
+      trigger.setAttribute('aria-expanded', 'true');
+      search.value = '';
+      filterOptions('');
+      search.focus();
+    }
+
+    function filterOptions(query) {
+      const normalized = query.trim().toLocaleLowerCase();
+      let visible = 0;
+      options.forEach(option => {
+        const match = option.dataset.search.toLocaleLowerCase().includes(normalized);
+        option.hidden = !match;
+        if (match) visible += 1;
+      });
+      noResults.hidden = visible > 0;
+    }
+
+    function syncSelection() {
+      const selected = options.find(option => option.dataset.value === select.value);
+      current.textContent = selected ? selected.querySelector('.product-option-name').textContent : 'Selecione um produto';
+      options.forEach(option => option.setAttribute('aria-selected', String(option === selected)));
+    }
+
+    trigger.addEventListener('click', () => {
+      if (panel.hidden) openPicker();
+      else closePicker();
+    });
+
+    search.addEventListener('input', () => filterOptions(search.value));
+    search.addEventListener('keydown', event => {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        const first = options.find(option => !option.hidden);
+        if (first) first.focus();
+      } else if (event.key === 'Escape') {
+        closePicker();
+        trigger.focus();
+      }
+    });
+
+    options.forEach((option, index) => {
+      option.addEventListener('click', () => {
+        select.value = option.dataset.value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        error.hidden = true;
+        syncSelection();
+        closePicker();
+        trigger.focus();
+      });
+      option.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+          closePicker();
+          trigger.focus();
+        } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          const direction = event.key === 'ArrowDown' ? 1 : -1;
+          let nextIndex = index + direction;
+          while (nextIndex >= 0 && nextIndex < options.length && options[nextIndex].hidden) nextIndex += direction;
+          if (options[nextIndex] && !options[nextIndex].hidden) options[nextIndex].focus();
+          else if (direction < 0) search.focus();
+        } else if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          option.click();
+        }
+      });
+    });
+
+    document.addEventListener('click', event => {
+      if (!picker.contains(event.target)) closePicker();
+    });
+
+    form.addEventListener('submit', event => {
+      if (!select.value) {
+        event.preventDefault();
+        error.hidden = false;
+        trigger.focus();
+      }
+    });
+
+    syncSelection();
   })();
 </script>
 {% endblock %}

@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django import forms
 from django.core.exceptions import ValidationError
-
+from django.utils.formats import number_format
 from .models import Adicional, Cliente, Comanda, Mesa, Pagamento, Produto, BaixaContaPagar
 
 
@@ -35,7 +35,7 @@ class AdicionarItemForm(forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["produto"].label_from_instance = lambda produto: (
-            f"{produto.nome} ——— {produto.categoria.nome} —— {produto.preco}"
+            f"{produto.nome} ——— {produto.categoria.nome} —— R$ {number_format(produto.preco, decimal_pos=2, use_l10n=True)}"
         )
         produto_id = self.data.get("produto") or self.initial.get("produto")
         if produto_id:
