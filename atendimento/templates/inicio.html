@@ -1,49 +1,121 @@
 {% extends 'base.html' %}
-{% block title %}Visão geral{% endblock %}
+{% block title %}
+    Visão geral
+{% endblock %}
 {% block content %}
-<h1>Visão geral</h1>
-<p class="muted">Olá, {{ user.get_short_name|default:user.username }}. Acesse as áreas liberadas para o seu perfil.</p>
-<div class="grid">
-  {% if pode_atendimento %}<section class="card">
-    <div class="muted">Comandas abertas</div>
-    <div class="metric">{{ total_comandas }}</div><a href="{% url 'atendimento:comandas' %}">Ir para atendimento →</a>
-  </section>{% endif %}
-  {% if pode_cozinha %}<section class="card">
-    <div class="muted">Itens em produção</div>
-    <div class="metric">{{ itens_cozinha }}</div><a href="{% url 'atendimento:cozinha' %}">Abrir painel da cozinha →</a>
-  </section>{% endif %}
-  {% if pode_caixa %}<section class="card">
-    <div class="muted">Caixa</div>
-    <div class="metric">{% if caixa %}Aberto{% else %}Fechado{% endif %}</div><a
-      href="{% url 'atendimento:caixa' %}">Acompanhar caixa →</a>
-  </section>{% endif %}
-</div>
-{% if pode_abrir_comanda %}<div class="toolbar"><a class="btn" href="{% url 'atendimento:nova_comanda' %}">＋ Abrir
-    comanda</a>{% if pode_atendimento %}<a class="btn secondary" href="{% url 'atendimento:comandas' %}">Ver
-    comandas</a>{% endif %}</div>{% endif %}
-{% if pode_atendimento %}<section class="card">
-  <h2>Comandas em andamento</h2>
-  {% for comanda in comandas %}<div class="row">
-    <div><strong><a href="{% url 'atendimento:comanda' comanda.pk %}">Comanda #{{ comanda.pk }}</a></strong>
-      <div class="subtle">{{ comanda.get_canal_display }}{% if comanda.mesa %} · Mesa {{ comanda.mesa.numero }}{% endif
-        %}{% if comanda.cliente %} · {{ comanda.cliente.nome }}{% endif %}</div>
-    </div>
-    <div class="total">R$ {{ comanda.total|floatformat:2 }}</div>
-  </div>
-  {% empty %}<div class="empty">Nenhuma comanda aberta no momento.</div>{% endfor %}
-</section>{% endif %}
-{% if pode_movimentar %}<section class="card">
-  <h2>Movimentação avulsa</h2>
-  <p class="subtle">Lance uma entrada (valor recebido) ou saída (conta paga). O registro é feito no caixa aberto sem
-    precisar entrar na área completa de movimentações.</p>{% if caixa_disponivel %}<form method="post"
-    action="{% url 'atendimento:registrar_movimentacao' %}">{% csrf_token %}<input type="hidden" name="origem"
-      value="inicio">
+    <h1>
+        Visão geral
+    </h1>
+    <p class="muted">
+        Olá, {{ user.get_short_name|default:user.username }}. Acesse as áreas liberadas para o seu perfil.
+    </p>
     <div class="grid">
-      <div class="field"><label for="id_tipo">Tipo</label>{{ movimentacao_form.tipo }}</div>
-      <div class="field"><label for="id_descricao">Descrição</label>{{ movimentacao_form.descricao }}</div>
-      <div class="field"><label for="id_valor">Valor</label>{{ movimentacao_form.valor }}</div>
-    </div><button type="submit">Registrar movimentação</button>
-  </form>{% else %}<div class="empty">Não há caixa aberto. Peça ao responsável para abrir o caixa antes de lançar uma
-    movimentação.</div>{% endif %}
-</section>{% endif %}
+        {% if pode_atendimento %}
+            <section class="card">
+                <div class="muted">
+                    Comandas abertas
+                </div>
+                <div class="metric">
+                    {{ total_comandas }}
+                </div>
+                <a href="{% url 'atendimento:comandas' %}">Ir para atendimento →</a>
+            </section>
+        {% endif %}
+        {% if pode_cozinha %}
+            <section class="card">
+                <div class="muted">
+                    Itens em produção
+                </div>
+                <div class="metric">
+                    {{ itens_cozinha }}
+                </div>
+                <a href="{% url 'atendimento:cozinha' %}">Abrir painel da cozinha →</a>
+            </section>
+        {% endif %}
+        {% if pode_caixa %}
+            <section class="card">
+                <div class="muted">
+                    Caixa
+                </div>
+                <div class="metric">
+                    {% if caixa %}
+                        Aberto
+                    {% else %}
+                        Fechado
+                    {% endif %}
+                </div>
+                <a href="{% url 'atendimento:caixa' %}">Acompanhar caixa →</a>
+            </section>
+        {% endif %}
+    </div>
+    {% if pode_abrir_comanda %}
+        <div class="toolbar">
+            <a class="btn" href="{% url 'atendimento:nova_comanda' %}">＋ Abrir comanda</a>
+            {% if pode_atendimento %}
+                <a class="btn secondary" href="{% url 'atendimento:comandas' %}">Ver comandas</a>
+            {% endif %}
+        </div>
+    {% endif %}
+    {% if pode_atendimento %}
+        <section class="card">
+            <h2>
+                Comandas em andamento
+            </h2>
+            {% for comanda in comandas %}
+                <div class="row">
+                    <div>
+                        <strong><a href="{% url 'atendimento:comanda' comanda.pk %}">Comanda #{{ comanda.pk }}</a></strong>
+                        <div class="subtle">
+                            {{ comanda.get_canal_display }}
+                            {% if comanda.mesa %}
+                                · Mesa {{ comanda.mesa.numero }}
+                            {% endif %}
+                            {% if comanda.cliente %}
+                                · {{ comanda.cliente.nome }}
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="total">
+                        R$ {{ comanda.total|floatformat:2 }}
+                    </div>
+                </div>
+            {% empty %}
+                <div class="empty">
+                    Nenhuma comanda aberta no momento.
+                </div>
+            {% endfor %}
+        </section>
+    {% endif %}
+    {% if pode_movimentar %}
+        <section class="card">
+            <h2>
+                Movimentação avulsa
+            </h2>
+            <p class="subtle">
+                Lance uma entrada (valor recebido) ou saída (conta paga). O registro é feito no caixa aberto sem precisar entrar na área completa de movimentações.
+            </p>
+            {% if caixa_disponivel %}
+                <form method="post" action="{% url 'atendimento:registrar_movimentacao' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="origem" value="inicio">
+                    <div class="grid">
+                        <div class="field">
+                            <label for="id_tipo">Tipo</label>{{ movimentacao_form.tipo }}
+                        </div>
+                        <div class="field">
+                            <label for="id_descricao">Descrição</label>{{ movimentacao_form.descricao }}
+                        </div>
+                        <div class="field">
+                            <label for="id_valor">Valor</label>{{ movimentacao_form.valor }}
+                        </div>
+                    </div>
+                    <button type="submit">Registrar movimentação</button>
+                </form>
+            {% else %}
+                <div class="empty">
+                    Não há caixa aberto. Peça ao responsável para abrir o caixa antes de lançar uma movimentação.
+                </div>
+            {% endif %}
+        </section>
+    {% endif %}
 {% endblock %}

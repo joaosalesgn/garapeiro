@@ -1,55 +1,112 @@
 {% extends 'base.html' %}
-{% block title %}Contas a receber{% endblock %}
+{% block title %}
+    Contas a receber
+{% endblock %}
 {% block content %}
-<h1>Contas a receber</h1>
-<p class="muted">Cada comanda encerrada gera um CR; os recebimentos ficam vinculados ao próprio registro.</p>
-<section class="card">
-    <div class="table-wrap">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>CR / comanda</th>
-                    <th>Cliente</th>
-                    <th>Vencimento</th>
-                    <th>Valor</th>
-                    <th>Recebido</th>
-                    <th>Saldo</th>
-                    <th>Status</th>
-                    <th>Receber</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for conta in contas %}<tr>
-                    <td>#{{ conta.pk }} / <a href="{% url 'atendimento:comanda' conta.comanda_id %}">Comanda #{{
-                            conta.comanda_id }}</a></td>
-                    <td>{{ conta.cliente|default:'—' }}</td>
-                    <td>{{ conta.vencimento|date:'d/m/Y' }}</td>
-                    <td>R$ {{ conta.valor_total|floatformat:2 }}</td>
-                    <td>R$ {{ conta.total_recebido|floatformat:2 }}</td>
-                    <td>R$ {{ conta.saldo|floatformat:2 }}</td>
-                    <td><span class="pill {% if conta.status == 'QUITADA' %}{% else %}warn{% endif %}">{{
-                            conta.get_status_display }}</span></td>
-                    <td>
-                        {% if conta.saldo > 0 and pode_receber %}{% if caixa_aberto %}<form method="post"
-                            action="{% url 'atendimento:receber_conta' conta.pk %}">{% csrf_token %}<select name="forma"
-                                aria-label="Forma de recebimento">
-                                <option value="DINHEIRO">Dinheiro</option>
-                                <option value="PIX">PIX</option>
-                                <option value="CREDITO">Cartão de crédito</option>
-                                <option value="DEBITO">Cartão de débito</option>
-                                <option value="OUTRO">Outro</option>
-                            </select><input type="number" name="valor" min="0.01" max="{{ conta.saldo }}" step="0.01"
-                                value="{{ conta.saldo }}" required aria-label="Valor recebido"><input type="text"
-                                name="referencia" maxlength="100" placeholder="Referência"><button
-                                type="submit">Receber</button></form>{% else %}<span class="subtle">Abra o
-                            caixa</span>{% endif %}{% else %}—{% endif %}</td>
-                </tr>{% empty %}<tr>
-                    <td colspan="8">
-                        <div class="empty">Nenhuma conta a receber registrada.</div>
-                    </td>
-                </tr>{% endfor %}
-            </tbody>
-        </table>
-    </div>
-</section>
+    <h1>
+        Contas a receber
+    </h1>
+    <p class="muted">
+        Cada comanda encerrada gera um CR; os recebimentos ficam vinculados ao próprio registro.
+    </p>
+    <section class="card">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>
+                            CR / comanda
+                        </th>
+                        <th>
+                            Cliente
+                        </th>
+                        <th>
+                            Vencimento
+                        </th>
+                        <th>
+                            Valor
+                        </th>
+                        <th>
+                            Recebido
+                        </th>
+                        <th>
+                            Saldo
+                        </th>
+                        <th>
+                            Status
+                        </th>
+                        <th>
+                            Receber
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for conta in contas %}
+                        <tr>
+                            <td>
+                                #{{ conta.pk }} / <a href="{% url 'atendimento:comanda' conta.comanda_id %}">Comanda #{{ conta.comanda_id }}</a>
+                            </td>
+                            <td>
+                                {{ conta.cliente|default:'—' }}
+                            </td>
+                            <td>
+                                {{ conta.vencimento|date:'d/m/Y' }}
+                            </td>
+                            <td>
+                                R$ {{ conta.valor_total|floatformat:2 }}
+                            </td>
+                            <td>
+                                R$ {{ conta.total_recebido|floatformat:2 }}
+                            </td>
+                            <td>
+                                R$ {{ conta.saldo|floatformat:2 }}
+                            </td>
+                            <td>
+                                <span class="pill {% if conta.status == 'QUITADA' %}{% else %}warn{% endif %}">{{ conta.get_status_display }}</span>
+                            </td>
+                            <td>
+                                {% if conta.saldo > 0 and pode_receber %}
+                                    {% if caixa_aberto %}
+                                        <form method="post" action="{% url 'atendimento:receber_conta' conta.pk %}">
+                                            {% csrf_token %}
+                                            <select name="forma" aria-label="Forma de recebimento">
+                                                <option value="DINHEIRO">
+                                                    Dinheiro
+                                                </option>
+                                                <option value="PIX">
+                                                    PIX
+                                                </option>
+                                                <option value="CREDITO">
+                                                    Cartão de crédito
+                                                </option>
+                                                <option value="DEBITO">
+                                                    Cartão de débito
+                                                </option>
+                                                <option value="OUTRO">
+                                                    Outro
+                                                </option>
+                                            </select>
+                                            <input type="number" name="valor" min="0.01" max="{{ conta.saldo }}" step="0.01" value="{{ conta.saldo }}" required aria-label="Valor recebido"><input type="text" name="referencia" maxlength="100" placeholder="Referência"><button type="submit">Receber</button>
+                                        </form>
+                                    {% else %}
+                                        <span class="subtle">Abra o caixa</span>
+                                    {% endif %}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="8">
+                                <div class="empty">
+                                    Nenhuma conta a receber registrada.
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
 {% endblock %}

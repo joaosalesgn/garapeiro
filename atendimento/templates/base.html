@@ -1,11 +1,15 @@
 <!doctype html>
 <html lang="pt-br">
-
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}O GARAPEIRO CAFÉ{% endblock %} · O Garapeiro Café</title>
-  <style>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>
+            {% block title %}
+                O GARAPEIRO CAFÉ
+            {% endblock %}
+            · O Garapeiro Café
+        </title>
+        <style>
     :root {
       --ink: #202319;
       --muted: #6d7065;
@@ -444,37 +448,57 @@
       }
     }
   </style>
-</head>
-
-<body>
-  <header>
-    <a class="brand" href="{% url 'atendimento:inicio' %}">O Garapeiro Café</a>
-    {% if user.is_authenticated %}
-    <nav aria-label="Menu principal">
-      <a href="{% url 'atendimento:inicio' %}">Início</a>
-      {% if perms.atendimento.view_comanda %}<a href="{% url 'atendimento:comandas' %}">Atendimento</a>{% endif %}
-      {% if perms.atendimento.view_comandaitem %}<a href="{% url 'atendimento:cozinha' %}">Cozinha</a>{% endif %}
-      {% if perms.atendimento.view_caixa %}<a href="{% url 'atendimento:caixa' %}">Caixa</a>{% endif %}
-      {% if perms.atendimento.view_contareceber %}<a href="{% url 'atendimento:contas_receber' %}">Contas a
-        receber</a>{% endif %}
-      {% if perms.atendimento.view_contapagar %}<a href="{% url 'atendimento:contas_pagar' %}">Contas a pagar</a>{%
-      endif %}
-      {% if user.is_staff %}<a href="{% url 'admin:index' %}">Cadastros</a>{% endif %}
-    </nav>
-    <div class="account">
-      <span class="user-chip" title="{{ user.get_short_name|default:user.username }}"><span class="avatar">{{
-          user.get_short_name|default:user.username|first|upper }}</span><span>{{
-          user.get_short_name|default:user.username }}</span></span>
-      <form class="inline" method="post" action="{% url 'atendimento:logout' %}">{% csrf_token %}<button
-          class="logout-button" type="submit">Sair</button></form>
-    </div>
-    {% else %}<nav aria-label="Acesso"><a href="{% url 'atendimento:login' %}">Entrar</a></nav>{% endif %}
-  </header>
-  <main class="wrap">
-    {% if messages %}<ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>
-      {% endfor %}</ul>{% endif %}
-    {% block content %}{% endblock %}
-  </main>
-</body>
-
+    </head>
+    <body>
+        <header>
+            <a class="brand" href="{% url 'atendimento:inicio' %}">O Garapeiro Café</a>
+            {% if user.is_authenticated %}
+                <nav aria-label="Menu principal">
+                    <a href="{% url 'atendimento:inicio' %}">Início</a>
+                    {% if perms.atendimento.view_comanda %}
+                        <a href="{% url 'atendimento:comandas' %}">Atendimento</a>
+                    {% endif %}
+                    {% if perms.atendimento.view_comandaitem %}
+                        <a href="{% url 'atendimento:cozinha' %}">Cozinha</a>
+                    {% endif %}
+                    {% if perms.atendimento.view_caixa %}
+                        <a href="{% url 'atendimento:caixa' %}">Caixa</a>
+                    {% endif %}
+                    {% if perms.atendimento.view_contareceber %}
+                        <a href="{% url 'atendimento:contas_receber' %}">Contas a receber</a>
+                    {% endif %}
+                    {% if perms.atendimento.view_contapagar %}
+                        <a href="{% url 'atendimento:contas_pagar' %}">Contas a pagar</a>
+                    {% endif %}
+                    {% if user.is_staff %}
+                        <a href="{% url 'admin:index' %}">Cadastros</a>
+                    {% endif %}
+                </nav>
+                <div class="account">
+                    <span class="user-chip" title="{{ user.get_short_name|default:user.username }}"><span class="avatar">{{ user.get_short_name|default:user.username|first|upper }}</span><span>{{ user.get_short_name|default:user.username }}</span></span>
+                    <form class="inline" method="post" action="{% url 'atendimento:logout' %}">
+                        {% csrf_token %}
+                        <button class="logout-button" type="submit">Sair</button>
+                    </form>
+                </div>
+            {% else %}
+                <nav aria-label="Acesso">
+                    <a href="{% url 'atendimento:login' %}">Entrar</a>
+                </nav>
+            {% endif %}
+        </header>
+        <main class="wrap">
+            {% if messages %}
+                <ul class="messages">
+                    {% for message in messages %}
+                        <li class="{{ message.tags }}">
+                            {{ message }}
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+            {% block content %}
+            {% endblock %}
+        </main>
+    </body>
 </html>

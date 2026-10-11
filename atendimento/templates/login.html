@@ -1,11 +1,12 @@
 <!doctype html>
 <html lang="pt-br">
-
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Entrar · Garapeiro</title>
-  <style>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>
+            Entrar · Garapeiro
+        </title>
+        <style>
     * {
       box-sizing: border-box
     }
@@ -137,30 +138,50 @@
       font-size: 13px
     }
   </style>
-</head>
-
-<body>
-  <main class="panel">
-    <div class="brand">
-      <div class="mark">G</div>
-      <div><strong>Garapeiro</strong><small>Sistema de atendimento</small></div>
-    </div>
-    <div class="eyebrow">Bem-vinda de volta</div>
-    <h1>Entrar no sistema</h1>
-    <p class="hint">Use seu usuário e senha para começar o expediente.</p>
-    {% if form.errors %}<div class="errors" role="alert">Usuário ou senha inválidos. Confira os dados e tente novamente.
-    </div>{% endif %}
-    {% if next and user.is_authenticated %}<div class="errors" role="alert">Sua conta não tem permissão para abrir essa
-      página.</div>{% endif %}
-    <form method="post">{% csrf_token %}<input type="hidden" name="next" value="{{ next }}">
-      <div class="field"><label for="id_username">Usuário</label><input id="id_username" name="username" type="text"
-          autocomplete="username" autocapitalize="none" required autofocus></div>
-      <div class="field"><label for="id_password">Senha</label><input id="id_password" name="password" type="password"
-          autocomplete="current-password" required></div>
-      <button class="submit" type="submit">Entrar</button>
-    </form>
-    <p class="foot">Seu acesso é definido pelo perfil configurado no sistema.</p>
-  </main>
-</body>
-
+    </head>
+    <body>
+        <main class="panel">
+            <div class="brand">
+                <div class="mark">
+                    G
+                </div>
+                <div>
+                    <strong>Garapeiro</strong><small>Sistema de atendimento</small>
+                </div>
+            </div>
+            <div class="eyebrow">
+                Bem-vinda de volta
+            </div>
+            <h1>
+                Entrar no sistema
+            </h1>
+            <p class="hint">
+                Use seu usuário e senha para começar o expediente.
+            </p>
+            {% if form.errors %}
+                <div class="errors" role="alert">
+                    Usuário ou senha inválidos. Confira os dados e tente novamente.
+                </div>
+            {% endif %}
+            {% if next and user.is_authenticated %}
+                <div class="errors" role="alert">
+                    Sua conta não tem permissão para abrir essa página.
+                </div>
+            {% endif %}
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ next }}">
+                <div class="field">
+                    <label for="id_username">Usuário</label><input id="id_username" name="username" type="text" autocomplete="username" autocapitalize="none" required autofocus>
+                </div>
+                <div class="field">
+                    <label for="id_password">Senha</label><input id="id_password" name="password" type="password" autocomplete="current-password" required>
+                </div>
+                <button class="submit" type="submit">Entrar</button>
+            </form>
+            <p class="foot">
+                Seu acesso é definido pelo perfil configurado no sistema.
+            </p>
+        </main>
+    </body>
 </html>

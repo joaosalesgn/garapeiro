@@ -1,72 +1,142 @@
 {% extends 'base.html' %}
-{% block title %}Caixa{% endblock %}
+{% block title %}
+    Caixa
+{% endblock %}
 {% block content %}
-<h1>Caixa</h1>
-{% if caixa %}<div class="toolbar"><span class="pill">Aberto · Caixa #{{ caixa.pk }}</span><span class="subtle">Desde {{
-        caixa.aberto_em|date:'d/m/Y H:i' }}</span></div>
-<div class="grid">
+    <h1>
+        Caixa
+    </h1>
+    {% if caixa %}
+        <div class="toolbar">
+            <span class="pill">Aberto · Caixa #{{ caixa.pk }}</span><span class="subtle">Desde {{ caixa.aberto_em|date:'d/m/Y H:i' }}</span>
+        </div>
+        <div class="grid">
+            <section class="card">
+                <div class="muted">
+                    Saldo esperado
+                </div>
+                <div class="metric">
+                    R$ {{ resumo.esperado|floatformat:2 }}
+                </div>
+                <div class="subtle">
+                    Valor inicial + recebimentos + entradas − saídas e contas pagas
+                </div>
+            </section>
+            <section class="card">
+                <div class="muted">
+                    Valor inicial
+                </div>
+                <div class="metric">
+                    R$ {{ caixa.valor_inicial|floatformat:2 }}
+                </div>
+            </section>
+            <section class="card">
+                <div class="muted">
+                    Recebimentos de comandas
+                </div>
+                <div class="metric">
+                    R$ {{ resumo.pagamentos|floatformat:2 }}
+                </div>
+            </section>
+        </div>
+        <div class="grid">
+            <section class="card">
+                <h2>
+                    Movimentação avulsa
+                </h2>
+                <form method="post" action="{% url 'atendimento:registrar_movimentacao' %}">
+                    {% csrf_token %}
+                    <div class="field">
+                        <label for="id_tipo">Tipo</label>
+                        <select name="tipo" id="id_tipo">
+                            <option value="ENTRADA">
+                                Entrada avulsa
+                            </option>
+                            <option value="SAIDA">
+                                Saída
+                            </option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="id_descricao">Descrição</label><input name="descricao" id="id_descricao" maxlength="150" required>
+                    </div>
+                    <div class="field">
+                        <label for="id_valor">Valor</label><input name="valor" id="id_valor" type="number" min="0.01" step="0.01" required>
+                    </div>
+                    <button type="submit">Registrar movimentação</button>
+                </form>
+            </section>
+            <section class="card">
+                <h2>
+                    Fechar caixa
+                </h2>
+                <p class="subtle">
+                    Informe o total efetivamente contado. O sistema mostra a diferença em relação ao esperado.
+                </p>
+                <form method="post" action="{% url 'atendimento:fechar_caixa' %}">
+                    {% csrf_token %}
+                    <div class="field">
+                        <label for="id_valor_fechamento">Valor contado</label><input name="valor_fechamento" id="id_valor_fechamento" type="number" min="0" step="0.01" required>
+                    </div>
+                    <div class="field">
+                        <label for="id_observacao_fechamento">Observação</label><textarea name="observacao" id="id_observacao_fechamento" rows="2"></textarea>
+                    </div>
+                    <button class="danger" type="submit" onclick="return confirm('Confirmar o fechamento do caixa?')">Fechar caixa</button>
+                </form>
+            </section>
+        </div>
+        <section class="card">
+            <h2>
+                Movimentações recentes
+            </h2>
+            <div class="row">
+                <span>Entradas avulsas</span><strong>R$ {{ resumo.entradas_avulsas|floatformat:2 }}</strong>
+            </div>
+            <div class="row">
+                <span>Saídas e contas pagas</span><strong>R$ {{ resumo.saidas|floatformat:2 }}</strong>
+            </div>
+            {% for mov in movimentacoes %}
+                <div class="row">
+                    <span>{{ mov.get_tipo_display }} · {{ mov.descricao }} · {{ mov.criado_em|date:'d/m H:i' }}</span><strong>R$ {{ mov.valor|floatformat:2 }}</strong>
+                </div>
+            {% empty %}
+                <div class="empty">
+                    Nenhuma movimentação avulsa.
+                </div>
+            {% endfor %}
+        </section>
+    {% else %}
+        <section class="card">
+            <h2>
+                Abrir caixa
+            </h2>
+            <p class="muted">
+                Abra o caixa para receber pagamentos das comandas e registrar entradas ou saídas.
+            </p>
+            <form method="post" action="{% url 'atendimento:abrir_caixa' %}">
+                {% csrf_token %}
+                <div class="field">
+                    <label for="id_valor_inicial">Valor inicial</label><input name="valor_inicial" id="id_valor_inicial" type="number" min="0" step="0.01" value="0.00" required>
+                </div>
+                <div class="field">
+                    <label for="id_observacao">Observação</label><textarea name="observacao" id="id_observacao" rows="2"></textarea>
+                </div>
+                <button type="submit">Abrir caixa</button>
+            </form>
+        </section>
+    {% endif %}
     <section class="card">
-        <div class="muted">Saldo esperado</div>
-        <div class="metric">R$ {{ resumo.esperado|floatformat:2 }}</div>
-        <div class="subtle">Valor inicial + recebimentos + entradas − saídas e contas pagas</div>
+        <h2>
+            Caixas encerrados
+        </h2>
+        {% for c, resumo_fechado in historico %}
+            <div class="row">
+                <span>Caixa #{{ c.pk }} · {{ c.aberto_em|date:'d/m/Y H:i' }} – {{ c.fechado_em|date:'d/m/Y H:i' }}</span><span>Esperado R$ {{ resumo_fechado.esperado|floatformat:2 }} · Contado R$ {{ c.valor_fechamento|floatformat:2 }}</span>
+            </div>
+        {% empty %}
+            <div class="empty">
+                Nenhum histórico de fechamento disponível.
+            </div>
+        {% endfor %}
     </section>
-    <section class="card">
-        <div class="muted">Valor inicial</div>
-        <div class="metric">R$ {{ caixa.valor_inicial|floatformat:2 }}</div>
-    </section>
-    <section class="card">
-        <div class="muted">Recebimentos de comandas</div>
-        <div class="metric">R$ {{ resumo.pagamentos|floatformat:2 }}</div>
-    </section>
-</div>
-<div class="grid">
-    <section class="card">
-        <h2>Movimentação avulsa</h2>
-        <form method="post" action="{% url 'atendimento:registrar_movimentacao' %}">{% csrf_token %}<div class="field">
-                <label for="id_tipo">Tipo</label><select name="tipo" id="id_tipo">
-                    <option value="ENTRADA">Entrada avulsa</option>
-                    <option value="SAIDA">Saída</option>
-                </select></div>
-            <div class="field"><label for="id_descricao">Descrição</label><input name="descricao" id="id_descricao"
-                    maxlength="150" required></div>
-            <div class="field"><label for="id_valor">Valor</label><input name="valor" id="id_valor" type="number"
-                    min="0.01" step="0.01" required></div><button type="submit">Registrar movimentação</button>
-        </form>
-    </section>
-    <section class="card">
-        <h2>Fechar caixa</h2>
-        <p class="subtle">Informe o total efetivamente contado. O sistema mostra a diferença em relação ao esperado.</p>
-        <form method="post" action="{% url 'atendimento:fechar_caixa' %}">{% csrf_token %}<div class="field"><label
-                    for="id_valor_fechamento">Valor contado</label><input name="valor_fechamento"
-                    id="id_valor_fechamento" type="number" min="0" step="0.01" required></div>
-            <div class="field"><label for="id_observacao_fechamento">Observação</label><textarea name="observacao"
-                    id="id_observacao_fechamento" rows="2"></textarea></div><button class="danger" type="submit"
-                onclick="return confirm('Confirmar o fechamento do caixa?')">Fechar caixa</button>
-        </form>
-    </section>
-</div>
-<section class="card">
-    <h2>Movimentações recentes</h2>
-    <div class="row"><span>Entradas avulsas</span><strong>R$ {{ resumo.entradas_avulsas|floatformat:2 }}</strong></div>
-    <div class="row"><span>Saídas e contas pagas</span><strong>R$ {{ resumo.saidas|floatformat:2 }}</strong></div>{% for
-    mov in movimentacoes %}<div class="row"><span>{{ mov.get_tipo_display }} · {{ mov.descricao }} · {{
-            mov.criado_em|date:'d/m H:i' }}</span><strong>R$ {{ mov.valor|floatformat:2 }}</strong></div>{% empty %}<div
-        class="empty">Nenhuma movimentação avulsa.</div>{% endfor %}
-</section>
-{% else %}<section class="card">
-    <h2>Abrir caixa</h2>
-    <p class="muted">Abra o caixa para receber pagamentos das comandas e registrar entradas ou saídas.</p>
-    <form method="post" action="{% url 'atendimento:abrir_caixa' %}">{% csrf_token %}<div class="field"><label
-                for="id_valor_inicial">Valor inicial</label><input name="valor_inicial" id="id_valor_inicial"
-                type="number" min="0" step="0.01" value="0.00" required></div>
-        <div class="field"><label for="id_observacao">Observação</label><textarea name="observacao" id="id_observacao"
-                rows="2"></textarea></div><button type="submit">Abrir caixa</button>
-    </form>
-</section>{% endif %}
-<section class="card">
-    <h2>Caixas encerrados</h2>{% for c, resumo_fechado in historico %}<div class="row"><span>Caixa #{{ c.pk }} · {{
-            c.aberto_em|date:'d/m/Y H:i' }} – {{ c.fechado_em|date:'d/m/Y H:i' }}</span><span>Esperado R$ {{
-            resumo_fechado.esperado|floatformat:2 }} · Contado R$ {{ c.valor_fechamento|floatformat:2 }}</span></div>{%
-    empty %}<div class="empty">Nenhum histórico de fechamento disponível.</div>{% endfor %}
-</section>
 {% endblock %}
