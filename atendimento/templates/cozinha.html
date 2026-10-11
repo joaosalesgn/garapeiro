@@ -1,9 +1,25 @@
 {% extends 'base.html' %}
 {% block title %}Cozinha{% endblock %}
 {% block content %}
-<h1>Painel da cozinha</h1><p class="muted">Acompanhe os itens enviados e atualize o andamento da produção.</p>
+<h1>Painel da cozinha</h1>
+<p class="muted">Acompanhe os itens enviados e atualize o andamento da produção.</p>
 <div class="grid">
-{% for item in itens %}<section class="card"><div class="toolbar"><span class="pill {% if item.status_producao == 'PRONTO' %}warn{% endif %}">{{ item.get_status_producao_display }}</span><span class="subtle">{{ item.criado_em|date:'H:i' }}</span></div><h2>Comanda #{{ item.comanda_id }}{% if item.comanda.mesa %} · Mesa {{ item.comanda.mesa.numero }}{% endif %}</h2><div class="total">{{ item.quantidade }} × {{ item.produto_nome }}</div>{% if item.observacao %}<p>{{ item.observacao }}</p>{% endif %}{% for adicional in item.adicionais.all %}<div class="subtle">+ {{ adicional.quantidade }} × {{ adicional.adicional_nome }}</div>{% endfor %}<div class="toolbar">{% if item.status_producao == 'PENDENTE' and perms.atendimento.change_comandaitem %}<form method="post" action="{% url 'atendimento:atualizar_cozinha' item.pk 'ENVIADO' %}">{% csrf_token %}<button type="submit">Enviar para preparo</button></form>{% elif item.status_producao == 'ENVIADO' and perms.atendimento.change_comandaitem %}<form method="post" action="{% url 'atendimento:atualizar_cozinha' item.pk 'PRONTO' %}">{% csrf_token %}<button type="submit">Marcar pronto</button></form>{% endif %}</div></section>
-{% empty %}<div class="empty">Nenhum item aguardando preparo.</div>{% endfor %}
+    {% for item in itens %}<section class="card">
+        <div class="toolbar"><span class="pill {% if item.status_producao == 'PRONTO' %}warn{% endif %}">{{
+                item.get_status_producao_display }}</span><span class="subtle">{{ item.criado_em|date:'H:i' }}</span>
+        </div>
+        <h2>Comanda #{{ item.comanda_id }}{% if item.comanda.mesa %} · Mesa {{ item.comanda.mesa.numero }}{% endif %}
+        </h2>
+        <div class="total">{{ item.quantidade }} × {{ item.produto_nome }}</div>{% if item.observacao %}<p>{{
+            item.observacao }}</p>{% endif %}{% for adicional in item.adicionais.all %}<div class="subtle">+ {{
+            adicional.quantidade }} × {{ adicional.adicional_nome }}</div>{% endfor %}<div class="toolbar">{% if
+            item.status_producao == 'PENDENTE' and perms.atendimento.change_comandaitem %}<form method="post"
+                action="{% url 'atendimento:atualizar_cozinha' item.pk 'ENVIADO' %}">{% csrf_token %}<button
+                    type="submit">Enviar para preparo</button></form>{% elif item.status_producao == 'ENVIADO' and
+            perms.atendimento.change_comandaitem %}<form method="post"
+                action="{% url 'atendimento:atualizar_cozinha' item.pk 'PRONTO' %}">{% csrf_token %}<button
+                    type="submit">Marcar pronto</button></form>{% endif %}</div>
+    </section>
+    {% empty %}<div class="empty">Nenhum item aguardando preparo.</div>{% endfor %}
 </div>
 {% endblock %}

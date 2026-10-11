@@ -402,3 +402,65 @@ As rotas também verificam permissões no servidor; ocultar um link no menu não
 ## Aplicar esta atualização
 
 Feche o servidor e faça cópia de segurança do seu `db.sqlite3`. Substitua os arquivos do projeto pelos desta versão, mas **não copie um banco de dados do pacote**: os usuários, grupos e dados atuais ficam no banco local da empresa. Depois, execute `manage.py migrate`, `manage.py check` e `manage.py test atendimento`. A migração `0007` foi preservada; esta mudança de menu não exige uma nova migração.
+
+
+CORREÇÃO INCREMENTAL — CATEGORIA NO SELETOR DE PRODUTOS
+
+Base: ZIP garapeiro.zip enviado pelo usuário.
+
+O que muda
+- O seletor de produto passa a exibir “Categoria — Produto”, por exemplo: “Bebidas — Suco de Água”.
+- A seleção continua enviando o identificador normal do produto; o carregamento e a validação dos adicionais permanecem inalterados.
+- Foi incluído um teste automatizado para a apresentação do rótulo.
+
+Arquivos incluídos
+- atendimento/forms.py
+- atendimento/tests.py
+
+Aplicação
+1. Feche o sistema e faça uma cópia do db.sqlite3 por segurança.
+2. Extraia este pacote na pasta principal do projeto, mesclando a pasta atendimento e substituindo somente os dois arquivos incluídos.
+3. Não é necessária migração do banco.
+4. Valide no Windows com: .venv\Scripts\python.exe manage.py check
+5. Execute: .venv\Scripts\python.exe manage.py test atendimento
+
+Pontos ainda indicados para concluir o sistema
+- Implementar contas a pagar e a receber como módulo financeiro próprio (diferente de movimentações avulsas de caixa).
+- Definir e implementar relatórios necessários.
+- Implementar e testar a impressão dos pedidos/comandas na impressora escolhida.
+- Fazer a validação final no computador de uso, incluindo fluxo de atendente, permissões, adicionais e pagamentos.
+
+O escopo final dessas etapas pode ser ajustado conforme a operação real da cafeteria.
+
+
+
+# Atualização incremental — contas a receber e contas a pagar
+
+Este pacote adiciona telas próprias de CR e CP, com permissões Django por modelo, e migração incremental `0008_contas_financeiras`. Não inclui banco de dados, backups ou cópias completas do projeto.
+
+## Antes de atualizar
+
+1. Feche o sistema e faça uma cópia de segurança do `db.sqlite3`.
+2. Confira com `manage.py showmigrations atendimento` que as migrações `0001` a `0007` estão aplicadas. Se não estiverem, pare e confira o banco antes de prosseguir.
+3. Copie os arquivos deste pacote para a pasta homônima do projeto, preservando a estrutura `atendimento/...`.
+4. Com o servidor parado, execute:
+
+```bat
+.venv\Scripts\python.exe manage.py migrate --plan
+.venv\Scripts\python.exe manage.py migrate
+.venv\Scripts\python.exe manage.py check
+.venv\Scripts\python.exe manage.py test atendimento
+```
+
+O plano deve incluir apenas `0008_contas_financeiras`. Não substitua `db.sqlite3` e não altere nem apague as migrações anteriores. Se houver qualquer divergência no plano, interrompa a atualização.
+
+## Regras incluídas
+
+- Cada comanda encerrada cria um CR vinculado à comanda. Comanda quitada no caixa gera CR quitado; comanda a prazo gera CR aberto, exige cliente e vencimento, e permite escolher o cliente no encerramento.
+- Pagamentos feitos antes do encerramento permanecem associados à comanda e contam no CR; assim, o CR pode nascer parcialmente recebido.
+- A tela de CR permite recebimentos parciais ou totais, sempre vinculados ao caixa aberto e ao histórico de pagamentos da comanda.
+- A tela de CP permite cadastrar obrigação com fornecedor, valor e vencimento, e fazer baixas parciais ou totais.
+- Pagamentos de CP são vinculados ao caixa aberto e entram como saídas no saldo esperado do caixa.
+- O menu e as rotas respeitam as permissões próprias de visualização de CR e CP. O Django cria as permissões dos modelos novos ao aplicar a migração; atribua-as aos grupos e faça os usuários saírem e entrarem novamente.
+
+A validação de execução do Django deve ser feita no computador do projeto, pois o ambiente de preparação deste pacote não tem Django instalado. Faça o backup antes da migração e confira os testes localmente.

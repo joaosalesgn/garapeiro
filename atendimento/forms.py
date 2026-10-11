@@ -3,7 +3,7 @@ from decimal import Decimal
 from django import forms
 from django.core.exceptions import ValidationError
 
-from .models import Adicional, Cliente, Comanda, Mesa, Pagamento, Produto
+from .models import Adicional, Cliente, Comanda, Mesa, Pagamento, Produto, BaixaContaPagar
 
 
 class NovaComandaForm(forms.Form):
@@ -35,7 +35,7 @@ class AdicionarItemForm(forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["produto"].label_from_instance = lambda produto: (
-            f"{produto.nome} ——— {produto.categoria.nome}"
+            f"{produto.nome} ——— {produto.categoria.nome} —— {produto.preco}"
         )
         produto_id = self.data.get("produto") or self.initial.get("produto")
         if produto_id:
@@ -80,3 +80,22 @@ class MovimentacaoForm(forms.Form):
     tipo = forms.ChoiceField(choices=(("ENTRADA", "Entrada avulsa"), ("SAIDA", "Saída")))
     descricao = forms.CharField(max_length=150)
     valor = forms.DecimalField(min_value=Decimal("0.01"), max_digits=10, decimal_places=2)
+
+
+class EncerrarComandaForm(forms.Form):
+    cliente = forms.ModelChoiceField(queryset=Cliente.objects.filter(ativo=True), required=False, label="Cliente")
+    vencimento = forms.DateField(required=False, label="Vencimento", widget=forms.DateInput(attrs={"type": "date"}))
+
+
+class NovaContaPagarForm(forms.Form):
+    descricao = forms.CharField(max_length=180, label="Descrição")
+    fornecedor = forms.CharField(max_length=150, required=False, label="Fornecedor")
+    valor_total = forms.DecimalField(min_value=Decimal("0.01"), max_digits=10, decimal_places=2, label="Valor")
+    vencimento = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}), label="Vencimento")
+    observacao = forms.CharField(required=False, label="Observação", widget=forms.Textarea(attrs={"rows": 2}))
+
+
+class BaixaContaPagarForm(forms.Form):
+    forma = forms.ChoiceField(choices=BaixaContaPagar.Forma.choices, label="Forma de pagamento")
+    valor = forms.DecimalField(min_value=Decimal("0.01"), max_digits=10, decimal_places=2, label="Valor pago")
+    referencia = forms.CharField(required=False, max_length=100, label="Referência")

@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.contrib.auth import views as auth_views
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required, permission_required
@@ -14,10 +15,11 @@ from django.views.decorators.http import require_POST
 
 from .forms import (
     AbrirCaixaForm, AdicionarItemForm, FecharCaixaForm, MovimentacaoForm,
-    NovaComandaForm, PagamentoForm,
+    NovaComandaForm, PagamentoForm, EncerrarComandaForm, NovaContaPagarForm, BaixaContaPagarForm,
 )
 from .models import (
-    Caixa, Comanda, ComandaItem, ItemAdicional, MovimentacaoCaixa, Pagamento
+    Caixa, Cliente, Comanda, ComandaItem, ItemAdicional, MovimentacaoCaixa, Pagamento,
+    ContaReceber, ContaPagar, BaixaContaPagar
 )
 
 
@@ -41,11 +43,14 @@ def _total_caixa(caixa):
     movimentos = list(caixa.movimentacoes.values("tipo").annotate(total=Sum("valor")))
     entradas_avulsas = sum((m["total"] for m in movimentos if m["tipo"] == MovimentacaoCaixa.Tipo.ENTRADA), Decimal("0.00"))
     saidas = sum((m["total"] for m in movimentos if m["tipo"] == MovimentacaoCaixa.Tipo.SAIDA), Decimal("0.00"))
+    saidas_contas_pagar = caixa.baixas_contas_pagar.aggregate(total=Sum("valor"))["total"] or Decimal("0.00")
+    saidas += saidas_contas_pagar
     esperado = caixa.valor_inicial + entradas_pagamentos + entradas_avulsas - saidas
     return {
         "pagamentos": entradas_pagamentos,
         "entradas_avulsas": entradas_avulsas,
         "saidas": saidas,
+        "saidas_contas_pagar": saidas_contas_pagar,
         "esperado": esperado,
     }
 
@@ -108,7 +113,7 @@ def detalhe_comanda(request, pk):
     pagamento_form = PagamentoForm(initial={"valor": max(comanda.saldo, Decimal("0.01"))})
     return render(request, "comanda.html", {
         "comanda": comanda, "caixa": caixa, "item_form": item_form,
-        "pagamento_form": pagamento_form,
+        "pagamento_form": pagamento_form, "clientes": Cliente.objects.filter(ativo=True),
     })
 
 
@@ -181,12 +186,13 @@ def registrar_pagamento(request, pk):
     with transaction.atomic():
         comanda = get_object_or_404(Comanda.objects.select_for_update(), pk=pk)
         caixa = Caixa.objects.select_for_update().filter(status=Caixa.Status.ABERTO).first()
-        if comanda.status != Comanda.Status.ABERTA:
-            messages.error(request, "Não é possível receber pagamento de uma comanda encerrada.")
+        conta = ContaReceber.objects.select_for_update().filter(comanda=comanda).first()
+        if comanda.status != Comanda.Status.ABERTA and not conta:
+            messages.error(request, "Não existe conta a receber aberta para esta comanda encerrada.")
         elif not caixa:
-            messages.error(request, "Abra o caixa antes de registrar pagamentos.")
+            messages.error(request, "Abra o caixa antes de registrar recebimentos.")
         elif comanda.total <= 0:
-            messages.error(request, "Adicione pelo menos um item antes do pagamento.")
+            messages.error(request, "Adicione pelo menos um item antes do recebimento.")
         elif form.cleaned_data["valor"] > comanda.saldo:
             messages.error(request, f"O valor supera o saldo de R$ {comanda.saldo:.2f}.")
         else:
@@ -195,14 +201,28 @@ def registrar_pagamento(request, pk):
                 valor=form.cleaned_data["valor"], referencia=form.cleaned_data["referencia"],
                 criado_por=request.user, atualizado_por=request.user,
             )
+            if conta:
+                conta.atualizar_status()
             if comanda.saldo == 0:
-                comanda.status = Comanda.Status.FECHADA
-                comanda.fechada_em = timezone.now()
-                comanda.atualizado_por = request.user
-                comanda.save(update_fields=["status", "fechada_em", "atualizado_por", "atualizado_em"])
-                messages.success(request, "Pagamento quitado. Comanda encerrada automaticamente.")
-                return redirect("atendimento:inicio")
-            messages.success(request, f"Pagamento registrado. Saldo restante: R$ {comanda.saldo:.2f}.")
+                if comanda.status == Comanda.Status.ABERTA:
+                    comanda.status = Comanda.Status.FECHADA
+                    comanda.fechada_em = timezone.now()
+                    comanda.atualizado_por = request.user
+                    comanda.save(update_fields=["status", "fechada_em", "atualizado_por", "atualizado_em"])
+                    conta, _ = ContaReceber.objects.get_or_create(
+                        comanda=comanda,
+                        defaults={"cliente": comanda.cliente, "valor_total": comanda.total,
+                                  "vencimento": timezone.localdate(), "criado_por": request.user,
+                                  "atualizado_por": request.user},
+                    )
+                    conta.atualizar_status()
+                    messages.success(request, "Recebimento quitado. Comanda encerrada e CR gerado como quitado.")
+                    return redirect("atendimento:inicio")
+                messages.success(request, "Recebimento registrado; conta a receber quitada.")
+            else:
+                messages.success(request, f"Recebimento registrado. Saldo restante: R$ {comanda.saldo:.2f}.")
+    if comanda.status == Comanda.Status.FECHADA:
+        return redirect("atendimento:contas_receber")
     return redirect("atendimento:comanda", pk=pk)
 
 
@@ -211,24 +231,133 @@ def registrar_pagamento(request, pk):
 @permission_required("atendimento.change_comanda", raise_exception=True)
 def fechar_comanda(request, pk):
     with transaction.atomic():
-        comanda = get_object_or_404(Comanda.objects.select_for_update(), pk=pk)
-        if comanda.status != Comanda.Status.ABERTA:
+        comanda = get_object_or_404(Comanda.objects.select_for_update().select_related("cliente"), pk=pk)
+        form = EncerrarComandaForm(request.POST)
+        if not form.is_valid():
+            messages.error(request, "Confira o cliente e o vencimento informados.")
+        elif comanda.status != Comanda.Status.ABERTA:
             messages.error(request, "A comanda já está encerrada.")
         elif not comanda.itens.exclude(status_producao=ComandaItem.StatusProducao.CANCELADO).exists():
             messages.error(request, "Adicione pelo menos um item válido antes de encerrar.")
-        elif comanda.saldo > 0:
-            messages.error(request, f"Ainda há saldo de R$ {comanda.saldo:.2f} a receber.")
+        elif comanda.saldo < 0:
+            messages.error(request, "O total recebido não pode superar o valor da comanda.")
         elif comanda.itens.exclude(status_producao=ComandaItem.StatusProducao.CANCELADO).exclude(
             status_producao=ComandaItem.StatusProducao.PRONTO
         ).exists():
             messages.error(request, "A comanda só pode ser encerrada depois que todos os itens ficarem prontos.")
         else:
-            comanda.status = Comanda.Status.FECHADA
-            comanda.fechada_em = timezone.now()
-            comanda.atualizado_por = request.user
-            comanda.save(update_fields=["status", "fechada_em", "atualizado_por", "atualizado_em"])
-            messages.success(request, "Comanda encerrada.")
+            cliente = form.cleaned_data.get("cliente") or comanda.cliente
+            if comanda.saldo > 0 and not cliente:
+                messages.error(request, "Selecione um cliente para encerrar a comanda a prazo.")
+            elif comanda.saldo > 0 and not form.cleaned_data.get("vencimento"):
+                messages.error(request, "Informe o vencimento da conta a receber.")
+            else:
+                comanda.cliente = cliente
+                comanda.status = Comanda.Status.FECHADA
+                comanda.fechada_em = timezone.now()
+                comanda.atualizado_por = request.user
+                comanda.save(update_fields=["cliente", "status", "fechada_em", "atualizado_por", "atualizado_em"])
+                conta, _ = ContaReceber.objects.get_or_create(
+                    comanda=comanda,
+                    defaults={"cliente": cliente, "valor_total": comanda.total,
+                              "vencimento": form.cleaned_data.get("vencimento") or timezone.localdate(),
+                              "criado_por": request.user, "atualizado_por": request.user},
+                )
+                conta.cliente = cliente
+                conta.valor_total = comanda.total
+                conta.atualizado_por = request.user
+                conta.save(update_fields=["cliente", "valor_total", "atualizado_por", "atualizado_em"])
+                conta.atualizar_status()
+                if conta.status == ContaReceber.Status.QUITADA:
+                    messages.success(request, "Comanda encerrada e CR gerado como quitado.")
+                else:
+                    messages.success(request, f"Comanda encerrada a prazo. CR #{conta.pk} criado para {cliente}.")
+                return redirect("atendimento:contas_receber")
     return redirect("atendimento:comanda", pk=pk)
+
+
+@login_required
+@permission_required("atendimento.view_contareceber", raise_exception=True)
+def contas_receber(request):
+    contas = ContaReceber.objects.select_related("cliente", "comanda").order_by("vencimento", "-criado_em")
+    return render(request, "contas_receber.html", {"contas": contas, "caixa_aberto": _caixa_aberto(), "pode_receber": request.user.has_perm("atendimento.add_pagamento")})
+
+
+@login_required
+@permission_required("atendimento.add_pagamento", raise_exception=True)
+@require_POST
+def receber_conta(request, pk):
+    form = PagamentoForm(request.POST)
+    if not form.is_valid():
+        for erro in form.errors.values():
+            messages.error(request, " ".join(erro))
+        return redirect("atendimento:contas_receber")
+    with transaction.atomic():
+        conta = get_object_or_404(ContaReceber.objects.select_for_update().select_related("comanda"), pk=pk)
+        caixa = Caixa.objects.select_for_update().filter(status=Caixa.Status.ABERTO).first()
+        if conta.status == ContaReceber.Status.QUITADA:
+            messages.error(request, "Esta conta a receber já está quitada.")
+        elif not caixa:
+            messages.error(request, "Abra o caixa antes de registrar o recebimento.")
+        elif form.cleaned_data["valor"] > conta.saldo:
+            messages.error(request, f"O valor supera o saldo de R$ {conta.saldo:.2f}.")
+        else:
+            Pagamento.objects.create(
+                comanda=conta.comanda, caixa=caixa, forma=form.cleaned_data["forma"],
+                valor=form.cleaned_data["valor"], referencia=form.cleaned_data["referencia"],
+                criado_por=request.user, atualizado_por=request.user,
+            )
+            conta.atualizar_status()
+            messages.success(request, f"Recebimento registrado no CR #{conta.pk}.")
+    return redirect("atendimento:contas_receber")
+
+
+@login_required
+@permission_required("atendimento.view_contapagar", raise_exception=True)
+def contas_pagar(request):
+    form = NovaContaPagarForm()
+    if request.method == "POST":
+        if not request.user.has_perm("atendimento.add_contapagar"):
+            raise PermissionDenied
+        form = NovaContaPagarForm(request.POST)
+        if form.is_valid():
+            conta = ContaPagar.objects.create(**form.cleaned_data, criado_por=request.user, atualizado_por=request.user)
+            messages.success(request, f"Conta a pagar #{conta.pk} cadastrada.")
+            return redirect("atendimento:contas_pagar")
+    return render(request, "contas_pagar.html", {
+        "contas": ContaPagar.objects.prefetch_related("baixas").order_by("vencimento", "-criado_em"),
+        "form": form,
+        "pode_adicionar": request.user.has_perm("atendimento.add_contapagar"),
+        "pode_baixar": request.user.has_perm("atendimento.add_baixacontapagar"),
+        "caixa_aberto": _caixa_aberto(),
+    })
+
+
+@login_required
+@require_POST
+@permission_required("atendimento.add_baixacontapagar", raise_exception=True)
+def baixar_conta_pagar(request, pk):
+    form = BaixaContaPagarForm(request.POST)
+    if not form.is_valid():
+        for erro in form.errors.values():
+            messages.error(request, " ".join(erro))
+        return redirect("atendimento:contas_pagar")
+    with transaction.atomic():
+        conta = get_object_or_404(ContaPagar.objects.select_for_update(), pk=pk)
+        caixa = Caixa.objects.select_for_update().filter(status=Caixa.Status.ABERTO).first()
+        if not caixa:
+            messages.error(request, "Abra o caixa para registrar um pagamento de conta.")
+        elif form.cleaned_data["valor"] > conta.saldo:
+            messages.error(request, f"O valor supera o saldo de R$ {conta.saldo:.2f}.")
+        else:
+            BaixaContaPagar.objects.create(
+                conta=conta, caixa=caixa, forma=form.cleaned_data["forma"],
+                valor=form.cleaned_data["valor"], referencia=form.cleaned_data["referencia"],
+                criado_por=request.user, atualizado_por=request.user,
+            )
+            conta.atualizar_status()
+            messages.success(request, f"Pagamento registrado na CP #{conta.pk}.")
+    return redirect("atendimento:contas_pagar")
 
 
 @login_required

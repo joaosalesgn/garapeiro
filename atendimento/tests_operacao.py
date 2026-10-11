@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import Adicional, Caixa, Categoria, Comanda, ComandaItem, ItemAdicional, Mesa, MovimentacaoCaixa, Pagamento, Produto, ProdutoAdicional
+from .models import Adicional, Caixa, Categoria, Comanda, ComandaItem, ItemAdicional, Mesa, MovimentacaoCaixa, Pagamento, Produto, ProdutoAdicional, ContaReceber, ContaPagar, BaixaContaPagar
 
 
 class OperacaoAtendimentoTests(TestCase):
@@ -149,6 +149,52 @@ class OperacaoAtendimentoTests(TestCase):
         self.assertEqual(caixa.status, Caixa.Status.FECHADO)
         self.assertEqual(caixa.valor_fechamento, Decimal("85.00"))
         self.assertEqual(MovimentacaoCaixa.objects.count(), 1)
+
+    def test_comanda_a_prazo_cria_conta_receber_com_cliente_e_vencimento(self):
+        from datetime import date
+        from .models import Cliente
+        cliente = Cliente.objects.create(nome="Cliente devedor")
+        comanda = Comanda.objects.create(mesa=self.mesa, criado_por=self.user)
+        ComandaItem.objects.create(comanda=comanda, produto=self.produto, produto_nome=self.produto.nome,
+                                   quantidade=1, preco_unitario=self.produto.preco,
+                                   status_producao=ComandaItem.StatusProducao.PRONTO)
+        resposta = self.client.post(reverse("atendimento:fechar_comanda", kwargs={"pk": comanda.pk}),
+                                    {"cliente": cliente.pk, "vencimento": "2026-11-10"})
+        self.assertRedirects(resposta, reverse("atendimento:contas_receber"))
+        comanda.refresh_from_db()
+        cr = ContaReceber.objects.get(comanda=comanda)
+        self.assertEqual(cr.cliente, cliente)
+        self.assertEqual(cr.valor_total, Decimal("12.50"))
+        self.assertEqual(cr.vencimento, date(2026, 11, 10))
+        self.assertEqual(cr.status, ContaReceber.Status.ABERTA)
+
+    def test_comanda_paga_gera_cr_quitado(self):
+        caixa = Caixa.objects.create(criado_por=self.user)
+        comanda = Comanda.objects.create(mesa=self.mesa, criado_por=self.user)
+        ComandaItem.objects.create(comanda=comanda, produto=self.produto, produto_nome=self.produto.nome,
+                                   quantidade=1, preco_unitario=self.produto.preco,
+                                   status_producao=ComandaItem.StatusProducao.PRONTO)
+        self.client.post(reverse("atendimento:registrar_pagamento", kwargs={"pk": comanda.pk}),
+                         {"forma": Pagamento.Forma.PIX, "valor": "12.50", "referencia": ""})
+        cr = ContaReceber.objects.get(comanda=comanda)
+        self.assertEqual(cr.status, ContaReceber.Status.QUITADA)
+        self.assertEqual(cr.total_recebido, Decimal("12.50"))
+
+    def test_conta_a_pagar_e_baixa_entram_no_total_do_caixa(self):
+        caixa = Caixa.objects.create(valor_inicial=Decimal("100.00"), criado_por=self.user)
+        cp = ContaPagar.objects.create(descricao="Compra de insumos", valor_total=Decimal("30.00"),
+                                       vencimento="2026-11-10", criado_por=self.user)
+        url = reverse("atendimento:contas_pagar")
+        self.client.post(url, {"descricao": "Compra de insumos", "fornecedor": "Fornecedor",
+                               "valor_total": "30.00", "vencimento": "2026-11-10", "observacao": ""})
+        cp = ContaPagar.objects.order_by("-id").first()
+        self.client.post(reverse("atendimento:baixar_conta_pagar", kwargs={"pk": cp.pk}),
+                         {"forma": "PIX", "valor": "10.00", "referencia": ""})
+        cp.refresh_from_db()
+        self.assertEqual(cp.status, ContaPagar.Status.PARCIAL)
+        self.assertEqual(cp.saldo, Decimal("20.00"))
+        from .views import _total_caixa
+        self.assertEqual(_total_caixa(caixa)["esperado"], Decimal("90.00"))
 
     def test_telas_da_cozinha_e_caixa_carregam(self):
         self.assertEqual(self.client.get(reverse("atendimento:cozinha")).status_code, 200)

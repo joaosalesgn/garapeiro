@@ -317,3 +317,101 @@ class MovimentacaoCaixa(RegistroBase):
 
     def __str__(self):
         return f"{self.get_tipo_display()} — R$ {self.valor}"
+
+
+class ContaReceber(RegistroBase):
+    class Status(models.TextChoices):
+        ABERTA = "ABERTA", "Em aberto"
+        PARCIAL = "PARCIAL", "Parcialmente recebida"
+        QUITADA = "QUITADA", "Quitada"
+
+    comanda = models.OneToOneField(Comanda, on_delete=models.PROTECT, related_name="conta_receber")
+    cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="contas_receber", null=True, blank=True)
+    valor_total = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    vencimento = models.DateField()
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.ABERTA)
+    observacao = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "tab_conta_receber"
+        ordering = ["vencimento", "-criado_em"]
+        verbose_name = "conta a receber"
+        verbose_name_plural = "contas a receber"
+
+    @property
+    def total_recebido(self):
+        return self.comanda.pagamentos.aggregate(valor=Sum("valor"))["valor"] or Decimal("0.00")
+
+    @property
+    def saldo(self):
+        return max(self.valor_total - self.total_recebido, Decimal("0.00"))
+
+    def atualizar_status(self):
+        recebido = self.total_recebido
+        self.status = self.Status.QUITADA if recebido >= self.valor_total else (
+            self.Status.PARCIAL if recebido > 0 else self.Status.ABERTA
+        )
+        self.save(update_fields=["status", "atualizado_em"])
+
+    def __str__(self):
+        return f"CR #{self.pk} — Comanda #{self.comanda_id}"
+
+
+class ContaPagar(RegistroBase):
+    class Status(models.TextChoices):
+        ABERTA = "ABERTA", "Em aberto"
+        PARCIAL = "PARCIAL", "Parcialmente paga"
+        QUITADA = "QUITADA", "Quitada"
+
+    descricao = models.CharField(max_length=180)
+    fornecedor = models.CharField(max_length=150, blank=True)
+    valor_total = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    vencimento = models.DateField()
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.ABERTA)
+    observacao = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "tab_conta_pagar"
+        ordering = ["vencimento", "-criado_em"]
+        verbose_name = "conta a pagar"
+        verbose_name_plural = "contas a pagar"
+
+    @property
+    def total_pago(self):
+        return self.baixas.aggregate(valor=Sum("valor"))["valor"] or Decimal("0.00")
+
+    @property
+    def saldo(self):
+        return max(self.valor_total - self.total_pago, Decimal("0.00"))
+
+    def atualizar_status(self):
+        pago = self.total_pago
+        self.status = self.Status.QUITADA if pago >= self.valor_total else (
+            self.Status.PARCIAL if pago > 0 else self.Status.ABERTA
+        )
+        self.save(update_fields=["status", "atualizado_em"])
+
+    def __str__(self):
+        return f"CP #{self.pk} — {self.descricao}"
+
+
+class BaixaContaPagar(RegistroBase):
+    class Forma(models.TextChoices):
+        DINHEIRO = "DINHEIRO", "Dinheiro"
+        PIX = "PIX", "PIX"
+        CREDITO = "CREDITO", "Cartão de crédito"
+        DEBITO = "DEBITO", "Cartão de débito"
+        OUTRO = "OUTRO", "Outro"
+
+    conta = models.ForeignKey(ContaPagar, on_delete=models.PROTECT, related_name="baixas")
+    caixa = models.ForeignKey(Caixa, on_delete=models.PROTECT, related_name="baixas_contas_pagar")
+    forma = models.CharField(max_length=10, choices=Forma.choices)
+    valor = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    referencia = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        db_table = "tab_baixa_conta_pagar"
+        ordering = ["-criado_em"]
+        constraints = [models.CheckConstraint(condition=Q(valor__gt=0), name="ck_baixa_cp_valor_positivo")]
+        verbose_name = "pagamento de conta a pagar"
+        verbose_name_plural = "pagamentos de contas a pagar"

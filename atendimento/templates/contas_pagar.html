@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% block title %}Contas a pagar{% endblock %}
+{% block content %}
+<h1>Contas a pagar</h1>
+{% if pode_adicionar %}
+<section class="card">
+    <h2>Nova conta a pagar</h2>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+
+        {% for field in form %}
+        <div class="field">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {{ field.errors }}
+        </div>
+        {% endfor %}
+
+        <button type="submit">Cadastrar conta</button>
+    </form>
+</section>
+{% endif %}
+<section class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Descrição / fornecedor</th>
+                    <th>Vencimento</th>
+                    <th>Valor</th>
+                    <th>Pago</th>
+                    <th>Saldo</th>
+                    <th>Status</th>
+                    <th>Baixa</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for conta in contas %}
+                <tr>
+                    <td><strong>CP #{{ conta.pk }} · {{ conta.descricao }}</strong><br>{{ conta.fornecedor|default:'—' }}</td>
+                    <td>{{ conta.vencimento|date:'d/m/Y' }}</td>
+                    <td>R$ {{ conta.valor_total|floatformat:2 }}</td>
+                    <td>R$ {{ conta.total_pago|floatformat:2 }}</td>
+                    <td>R$ {{ conta.saldo|floatformat:2 }}</td>
+                    <td><span class="pill {% if conta.status == 'QUITADA' %}{% else %}warn{% endif %}">{{ conta.get_status_display }}</span></td>
+                    <td>{% if conta.saldo > 0 and pode_baixar %}{% if caixa_aberto %}
+                        <form method="post" action="{% url 'atendimento:baixar_conta_pagar' conta.pk %}">{% csrf_token %}
+                            <select
+                                name="forma" aria-label="Forma de pagamento">
+                                <option value="DINHEIRO">Dinheiro</option>
+                                <option value="PIX">PIX</option>
+                                <option value="CREDITO">Cartão de crédito</option>
+                                <option value="DEBITO">Cartão de débito</option>
+                                <option value="OUTRO">Outro</option>
+                            </select>
+                            <input type="number" name="valor" min="0.01" max="{{ conta.saldo }}" step="0.01" value="{{ conta.saldo }}" required aria-label="Valor pago">
+                            <input type="text" name="referencia" maxlength="100" placeholder="Referência">
+                            <button type="submit">Pagar</button>
+                        </form>{% else %}
+                        <span class="subtle">Abra o caixa</span>{% endif %}{% else %}—{% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty">Nenhuma conta a pagar cadastrada.</div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

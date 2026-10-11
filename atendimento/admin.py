@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     Adicional, Caixa, Categoria, Cliente, Comanda, ComandaItem,
     ItemAdicional, Mesa, MovimentacaoCaixa, Pagamento, Produto,
-    ProdutoAdicional, TipoMovimentacao,
+    ProdutoAdicional, TipoMovimentacao, ContaReceber, ContaPagar, BaixaContaPagar,
 )
 
 
@@ -122,3 +122,31 @@ class MovimentacaoCaixaAdmin(CriadoAtualizadoAdmin):
     list_filter = ("tipo", "criado_em")
     search_fields = ("descricao",)
     list_select_related = ("caixa",)
+
+
+@admin.register(ContaReceber)
+class ContaReceberAdmin(CriadoAtualizadoAdmin):
+    list_display = ("id", "comanda", "cliente", "valor_total", "vencimento", "status")
+    list_filter = ("status", "vencimento")
+    search_fields = ("comanda__id", "cliente__nome")
+    list_select_related = ("comanda", "cliente")
+
+
+class BaixaContaPagarInline(admin.TabularInline):
+    model = BaixaContaPagar
+    extra = 0
+
+
+@admin.register(ContaPagar)
+class ContaPagarAdmin(CriadoAtualizadoAdmin):
+    list_display = ("id", "descricao", "fornecedor", "valor_total", "vencimento", "status")
+    list_filter = ("status", "vencimento")
+    search_fields = ("descricao", "fornecedor")
+    inlines = (BaixaContaPagarInline,)
+
+
+@admin.register(BaixaContaPagar)
+class BaixaContaPagarAdmin(CriadoAtualizadoAdmin):
+    list_display = ("conta", "caixa", "forma", "valor", "criado_em")
+    list_filter = ("forma", "criado_em")
+    list_select_related = ("conta", "caixa")
