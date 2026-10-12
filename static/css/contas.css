@@ -1,64 +1,79 @@
-.payment-entry {
-    display: grid;
-    grid-template-columns: minmax(145px, 1fr) minmax(105px, 140px) minmax(175px, 1.2fr) auto;
-    align-items: end;
-    gap: .65rem;
-    min-width: 560px
-}
-
-.payment-entry .form-select,
-.payment-entry .form-control {
+.cp-table-wrap {
     width: 100%;
-    max-width: none;
-    min-height: 42px
-}
-
-.payment-entry .payment-control {
-    min-width: 0
-}
-
-.payment-entry label {
-    margin-bottom: .3rem;
-    font-size: .82rem
-}
-
-.payment-entry .payment-help {
-    display: block;
-    margin-top: .25rem;
-    line-height: 1.25
-}
-
-.payment-entry .btn {
-    min-height: 42px;
-    white-space: nowrap
-}
-
-.payment-scroll {
     overflow-x: auto;
-    padding-bottom: .35rem
 }
 
-@media(max-width:900px) {
-    .payment-entry {
-        grid-template-columns: minmax(140px, 1fr) minmax(120px, .8fr);
-        min-width: 0
-    }
-
-    .payment-entry .payment-action {
-        grid-column: 1/-1
-    }
-
-    .payment-entry .payment-action .btn {
-        width: 100%
-    }
+/* Cada campo de baixa ocupa sua própria coluna da tabela. */
+.cp-table {
+    min-width: 1420px;
 }
 
-@media(max-width:520px) {
-    .payment-entry {
-        grid-template-columns: 1fr
-    }
+.cp-table th:nth-child(1),
+.cp-table td:nth-child(1) {
+    min-width: 220px;
+}
 
-    .payment-entry .payment-action {
-        grid-column: auto
-    }
+.cp-table th:nth-child(2),
+.cp-table td:nth-child(2) {
+    min-width: 105px;
+    white-space: nowrap;
+}
+
+.cp-table th:nth-child(3),
+.cp-table th:nth-child(4),
+.cp-table th:nth-child(5),
+.cp-table td:nth-child(3),
+.cp-table td:nth-child(4),
+.cp-table td:nth-child(5) {
+    min-width: 105px;
+    white-space: nowrap;
+}
+
+.cp-table th:nth-child(6),
+.cp-table td:nth-child(6) {
+    min-width: 115px;
+}
+
+.cp-table th:nth-child(7),
+.cp-table td:nth-child(7) {
+    min-width: 160px;
+}
+
+.cp-table th:nth-child(8),
+.cp-table td:nth-child(8) {
+    min-width: 125px;
+}
+
+.cp-table th:nth-child(9),
+.cp-table td:nth-child(9) {
+    min-width: 190px;
+}
+
+.cp-table th:nth-child(10),
+.cp-table td:nth-child(10) {
+    min-width: 95px;
+}
+
+.cp-table .cp-payment-input {
+    width: 100%;
+    min-width: 0;
+}
+
+.cp-payment-form {
+    margin: 0;
+}
+
+.cp-payment-form .btn {
+    width: 100%;
+    min-height: 38px;
+    white-space: nowrap;
+}
+
+.cp-payment-form .btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.cp-payment-unavailable {
+    min-width: 570px;
 }
