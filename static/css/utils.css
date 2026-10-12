@@ -219,19 +219,36 @@ button.danger {
     gap: 12px
 }
 
-.row {
-    display: flex;
+.list-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    flex-wrap: wrap;
+    gap: 12px 20px;
+    width: 100%;
     border-bottom: 1px solid var(--line);
-    padding: 12px 0
+    padding: 10px 0
 }
 
-.row:last-child {
-    border: 0
+.list-row:last-child {
+    border-bottom: 0
 }
+
+.list-row-main {
+    min-width: 0;
+    overflow-wrap: anywhere
+}
+
+.list-row-value {
+    justify-self: end;
+    white-space: nowrap;
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums
+}
+
+/* .list-card {
+    max-width: 920px
+} */
 
 .pill {
     display: inline-flex;
@@ -583,6 +600,14 @@ textarea {
 
     .user-chip {
         max-width: 200px
+    }
+
+    .list-row {
+        gap: 8px 12px
+    }
+
+    .list-row-value {
+        font-size: 14px
     }
 
     .product-picker-panel {

@@ -11,13 +11,13 @@
             <a class="btn" href="{% url 'atendimento:nova_comanda' %}">＋ Abrir comanda</a>
         </div>
     {% endif %}
-    <section class="card">
+    <section class="card list-card">
         <h2>
             Em andamento
         </h2>
         {% for comanda in abertas %}
-            <div class="row">
-                <div>
+            <div class="list-row">
+                <div class="list-row-main">
                     <strong><a href="{% url 'atendimento:comanda' comanda.pk %}">Comanda #{{ comanda.pk }}</a></strong>
                     <div class="subtle">
                         {{ comanda.get_canal_display }}
@@ -30,7 +30,7 @@
                         · {{ comanda.criado_em|date:'d/m H:i' }}
                     </div>
                 </div>
-                <div>
+                <div class="list-row-value">
                     <span class="pill">Aberta</span> <strong>R$ {{ comanda.total|floatformat:2 }}</strong>
                 </div>
             </div>
@@ -40,19 +40,19 @@
             </div>
         {% endfor %}
     </section>
-    <section class="card">
+    <section class="card list-card">
         <h2>
             Encerradas recentemente
         </h2>
         {% for comanda in encerradas %}
-            <div class="row">
-                <div>
+            <div class="list-row">
+                <div class="list-row-main">
                     <strong>Comanda #{{ comanda.pk }}</strong>
                     <div class="subtle">
                         {{ comanda.get_canal_display }} · {{ comanda.get_status_display }} · {{ comanda.criado_em|date:'d/m H:i' }}
                     </div>
                 </div>
-                <strong>R$ {{ comanda.total|floatformat:2 }}</strong>
+                <strong class="list-row-value">R$ {{ comanda.total|floatformat:2 }}</strong>
             </div>
         {% empty %}
             <div class="empty">

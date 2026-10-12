@@ -57,13 +57,13 @@
         </div>
     {% endif %}
     {% if pode_atendimento %}
-        <section class="card">
+        <section class="card list-card">
             <h2>
                 Comandas em andamento
             </h2>
             {% for comanda in comandas %}
-                <div class="row">
-                    <div>
+                <div class="list-row">
+                    <div class="list-row-main">
                         <strong><a href="{% url 'atendimento:comanda' comanda.pk %}">Comanda #{{ comanda.pk }}</a></strong>
                         <div class="subtle">
                             {{ comanda.get_canal_display }}

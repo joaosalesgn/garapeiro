@@ -45,8 +45,8 @@
             Itens
         </h2>
         {% for item in comanda.itens.all %}
-            <div class="row">
-                <div>
+            <div class="list-row">
+                <div class="list-row-main">
                     <strong>{{ item.quantidade }} × {{ item.produto_nome }}</strong>
                     <div class="subtle">
                         {{ item.get_status_producao_display }}
@@ -60,7 +60,7 @@
                         </div>
                     {% endfor %}
                 </div>
-                <div>
+                <div class="list-row-value">
                     <strong>R$ {{ item.total|floatformat:2 }}</strong>
                     {% if comanda.status == 'ABERTA' and item.status_producao != 'CANCELADO' and perms.atendimento.change_comandaitem %}
                         <form class="inline" method="post" action="{% url 'atendimento:cancelar_item' comanda.pk item.pk %}">
@@ -75,14 +75,14 @@
                 Nenhum item nesta comanda.
             </div>
         {% endfor %}
-        <div class="row">
-            <strong>Total</strong><span class="total">R$ {{ comanda.total|floatformat:2 }}</span>
+        <div class="list-row">
+            <strong class="list-row-main">Total</strong><span class="total list-row-value">R$ {{ comanda.total|floatformat:2 }}</span>
         </div>
-        <div class="row">
-            <strong>Pago</strong><span>R$ {{ comanda.total_pago|floatformat:2 }}</span>
+        <div class="list-row">
+            <strong class="list-row-main">Pago</strong><span class="list-row-value">R$ {{ comanda.total_pago|floatformat:2 }}</span>
         </div>
-        <div class="row">
-            <strong>Saldo</strong><span class="total">R$ {{ comanda.saldo|floatformat:2 }}</span>
+        <div class="list-row">
+            <strong class="list-row-main">Saldo</strong><span class="total list-row-value">R$ {{ comanda.saldo|floatformat:2 }}</span>
         </div>
     </section>
     {% if comanda.status == 'ABERTA' %}
@@ -184,8 +184,8 @@
                 Pagamentos registrados
             </h2>
             {% for pagamento in comanda.pagamentos.all %}
-                <div class="row">
-                    <span>{{ pagamento.get_forma_display }} · {{ pagamento.criado_em|date:'d/m H:i' }}</span><strong>R$ {{ pagamento.valor|floatformat:2 }}</strong>
+                <div class="list-row">
+                    <span class="list-row-main">{{ pagamento.get_forma_display }} · {{ pagamento.criado_em|date:'d/m H:i' }}</span><strong class="list-row-value">R$ {{ pagamento.valor|floatformat:2 }}</strong>
                 </div>
             {% empty %}
                 <div class="empty">
@@ -237,8 +237,8 @@
                 Pagamentos
             </h2>
             {% for pagamento in comanda.pagamentos.all %}
-                <div class="row">
-                    <span>{{ pagamento.get_forma_display }} · {{ pagamento.criado_em|date:'d/m H:i' }}</span><strong>R$ {{ pagamento.valor|floatformat:2 }}</strong>
+                <div class="list-row">
+                    <span class="list-row-main">{{ pagamento.get_forma_display }} · {{ pagamento.criado_em|date:'d/m H:i' }}</span><strong class="list-row-value">R$ {{ pagamento.valor|floatformat:2 }}</strong>
                 </div>
             {% empty %}
                 <div class="empty">

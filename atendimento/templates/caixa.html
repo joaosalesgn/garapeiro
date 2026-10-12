@@ -85,19 +85,19 @@
                 </form>
             </section>
         </div>
-        <section class="card">
+        <section class="card list-card">
             <h2>
                 Movimentações recentes
             </h2>
-            <div class="row">
-                <span>Entradas avulsas</span><strong>R$ {{ resumo.entradas_avulsas|floatformat:2 }}</strong>
+            <div class="list-row">
+                <span class="list-row-main">Entradas avulsas</span><strong class="list-row-value">R$ {{ resumo.entradas_avulsas|floatformat:2 }}</strong>
             </div>
-            <div class="row">
-                <span>Saídas e contas pagas</span><strong>R$ {{ resumo.saidas|floatformat:2 }}</strong>
+            <div class="list-row">
+                <span class="list-row-main">Saídas e contas pagas</span><strong class="list-row-value">R$ {{ resumo.saidas|floatformat:2 }}</strong>
             </div>
             {% for mov in movimentacoes %}
-                <div class="row">
-                    <span>{{ mov.get_tipo_display }} · {{ mov.descricao }} · {{ mov.criado_em|date:'d/m H:i' }}</span><strong>R$ {{ mov.valor|floatformat:2 }}</strong>
+                <div class="list-row">
+                    <span class="list-row-main">{{ mov.get_tipo_display }} · {{ mov.descricao }} · {{ mov.criado_em|date:'d/m H:i' }}</span><strong class="list-row-value">R$ {{ mov.valor|floatformat:2 }}</strong>
                 </div>
             {% empty %}
                 <div class="empty">
@@ -125,13 +125,13 @@
             </form>
         </section>
     {% endif %}
-    <section class="card">
+    <section class="card list-card">
         <h2>
             Caixas encerrados
         </h2>
         {% for c, resumo_fechado in historico %}
-            <div class="row">
-                <span>Caixa #{{ c.pk }} · {{ c.aberto_em|date:'d/m/Y H:i' }} – {{ c.fechado_em|date:'d/m/Y H:i' }}</span><span>Esperado R$ {{ resumo_fechado.esperado|floatformat:2 }} · Contado R$ {{ c.valor_fechamento|floatformat:2 }}</span>
+            <div class="list-row">
+                <span class="list-row-main">Caixa #{{ c.pk }} · {{ c.aberto_em|date:'d/m/Y H:i' }} – {{ c.fechado_em|date:'d/m/Y H:i' }}</span><span class="list-row-value">Esperado R$ {{ resumo_fechado.esperado|floatformat:2 }} · Contado R$ {{ c.valor_fechamento|floatformat:2 }}</span>
             </div>
         {% empty %}
             <div class="empty">
