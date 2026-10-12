@@ -357,6 +357,24 @@ class ContaReceber(RegistroBase):
         return f"CR #{self.pk} — Comanda #{self.comanda_id}"
 
 
+class Fornecedor(RegistroBase):
+    """Cadastro reutilizável de fornecedores para as contas a pagar."""
+    nome = models.CharField(max_length=150)
+    telefone = models.CharField(max_length=30, blank=True)
+    email = models.EmailField(max_length=254, blank=True)
+    documento = models.CharField(max_length=30, blank=True, verbose_name="CPF/CNPJ")
+    ativo = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "tab_fornecedor"
+        ordering = ["nome"]
+        verbose_name = "fornecedor"
+        verbose_name_plural = "fornecedores"
+
+    def __str__(self):
+        return self.nome
+
+
 class ContaPagar(RegistroBase):
     class Status(models.TextChoices):
         ABERTA = "ABERTA", "Em aberto"
@@ -364,7 +382,10 @@ class ContaPagar(RegistroBase):
         QUITADA = "QUITADA", "Quitada"
 
     descricao = models.CharField(max_length=180)
-    fornecedor = models.CharField(max_length=150, blank=True)
+    fornecedor = models.ForeignKey(
+        Fornecedor, on_delete=models.SET_NULL, related_name="contas_pagar",
+        null=True, blank=True,
+    )
     valor_total = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
     vencimento = models.DateField()
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.ABERTA)

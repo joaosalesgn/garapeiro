@@ -1,8 +1,9 @@
 {% extends 'base.html' %}
-{% load l10n %}
+{% load l10n static %}
 {% block title %}
     Comanda #{{ comanda.pk }}
 {% endblock %}
+{% block extra_css %}<link href="{% static 'css/comanda.css' %}" rel="stylesheet">{% endblock %}
 {% block content %}
     <div class="toolbar">
         <a href="{% url 'atendimento:comandas' %}">← Atendimento</a><span class="pill {% if comanda.status != 'ABERTA' %}warn{% endif %}">{{ comanda.get_status_display }}</span>
@@ -159,13 +160,9 @@
                             Caixa aberto #{{ caixa.pk }}
                         </p>
                         <form method="post" action="{% url 'atendimento:registrar_pagamento' comanda.pk %}">
-                            {% csrf_token %}
-                            {% for field in pagamento_form %}
-                                <div class="field">
-                                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}
-                                </div>
-                            {% endfor %}
-                            <button type="submit">Registrar pagamento</button>
+                            {% csrf_token %}<div class="payment-form-grid">
+                                {% for field in pagamento_form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}{% if field.name == 'referencia' %}<small class="payment-form-help text-muted">Opcional: comprovante, nota fiscal ou código da transação.</small>{% endif %}</div>{% endfor %}
+                            </div><button class="btn btn-success" type="submit">Registrar pagamento</button>
                         </form>
                     {% else %}
                         <div class="empty">

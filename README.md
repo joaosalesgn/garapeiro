@@ -464,3 +464,27 @@ O plano deve incluir apenas `0008_contas_financeiras`. Não substitua `db.sqlite
 - O menu e as rotas respeitam as permissões próprias de visualização de CR e CP. O Django cria as permissões dos modelos novos ao aplicar a migração; atribua-as aos grupos e faça os usuários saírem e entrarem novamente.
 
 A validação de execução do Django deve ser feita no computador do projeto, pois o ambiente de preparação deste pacote não tem Django instalado. Faça o backup antes da migração e confira os testes localmente.
+
+
+
+# O Garapeiro Café — atualização financeira
+
+Este pacote contém o projeto Django atualizado com cadastro relacional de fornecedores, telas de pagamento reorganizadas, cabeçalho com o nome do usuário e estilos em arquivos separados. O banco de dados e os backups não são distribuídos.
+
+## Atualização
+
+1. Feche o sistema e faça backup de `db.sqlite3`.
+2. Confira se as migrações `0001` a `0008` estão aplicadas.
+3. Copie o conteúdo deste pacote para a instalação existente. Não substitua o banco nem os backups.
+4. Com o servidor parado, confira o plano. Deve constar a migração `0009_fornecedor_contapagar`; depois aplique-a e teste:
+
+```bat
+.venv\Scripts\python.exe manage.py migrate --plan
+.venv\Scripts\python.exe manage.py migrate
+.venv\Scripts\python.exe manage.py check
+.venv\Scripts\python.exe manage.py test atendimento
+```
+
+A migração transforma nomes existentes de fornecedores em registros da nova tabela sem descartar contas a pagar. Os fornecedores podem ser mantidos em **Cadastros → Fornecedores**. Cadastre os novos fornecedores antes de associá-los às contas.
+
+O Bootstrap 5.3.3 é carregado do jsDelivr e precisa de conexão à internet. Os estilos específicos estão em `static/css/`.

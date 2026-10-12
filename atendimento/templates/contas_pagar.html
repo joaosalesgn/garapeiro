@@ -1,7 +1,9 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block title %}
     Contas a pagar
 {% endblock %}
+{% block extra_css %}<link href="{% static 'css/contas.css' %}" rel="stylesheet">{% endblock %}
 {% block content %}
     <h1>
         Contas a pagar
@@ -25,7 +27,7 @@
     {% endif %}
     <section class="card">
         <div class="table-wrap">
-            <table class="table">
+            <table class="table table-striped align-middle">
                 <thead>
                     <tr>
                         <th>
@@ -55,7 +57,7 @@
                     {% for conta in contas %}
                         <tr>
                             <td>
-                                <strong>CP #{{ conta.pk }} · {{ conta.descricao }}</strong><br>{{ conta.fornecedor|default:'—' }}
+                                <strong>CP #{{ conta.pk }} · {{ conta.descricao }}</strong><br>{{ conta.fornecedor.nome|default:'—' }}
                             </td>
                             <td>
                                 {{ conta.vencimento|date:'d/m/Y' }}
@@ -75,27 +77,13 @@
                             <td>
                                 {% if conta.saldo > 0 and pode_baixar %}
                                     {% if caixa_aberto %}
-                                        <form method="post" action="{% url 'atendimento:baixar_conta_pagar' conta.pk %}">
+                                        <div class="payment-scroll"><form class="payment-entry" method="post" action="{% url 'atendimento:baixar_conta_pagar' conta.pk %}">
                                             {% csrf_token %}
-                                            <select name="forma" aria-label="Forma de pagamento">
-                                                <option value="DINHEIRO">
-                                                    Dinheiro
-                                                </option>
-                                                <option value="PIX">
-                                                    PIX
-                                                </option>
-                                                <option value="CREDITO">
-                                                    Cartão de crédito
-                                                </option>
-                                                <option value="DEBITO">
-                                                    Cartão de débito
-                                                </option>
-                                                <option value="OUTRO">
-                                                    Outro
-                                                </option>
-                                            </select>
-                                            <input type="number" name="valor" min="0.01" max="{{ conta.saldo }}" step="0.01" value="{{ conta.saldo }}" required aria-label="Valor pago"> <input type="text" name="referencia" maxlength="100" placeholder="Referência"> <button type="submit">Pagar</button>
-                                        </form>
+                                            <div class="payment-control"><label for="forma-{{ conta.pk }}">Forma</label><select class="form-select" id="forma-{{ conta.pk }}" name="forma"><option value="DINHEIRO">Dinheiro</option><option value="PIX">PIX</option><option value="CREDITO">Cartão de crédito</option><option value="DEBITO">Cartão de débito</option><option value="OUTRO">Outro</option></select></div>
+                                            <div class="payment-control"><label for="valor-{{ conta.pk }}">Valor</label><input class="form-control" id="valor-{{ conta.pk }}" type="number" name="valor" min="0.01" max="{{ conta.saldo }}" step="0.01" value="{{ conta.saldo }}" required></div>
+                                            <div class="payment-control"><label for="referencia-{{ conta.pk }}">Referência <span class="text-muted fw-normal">(opcional)</span></label><input class="form-control" id="referencia-{{ conta.pk }}" type="text" name="referencia" maxlength="100" placeholder="Nº de documento ou transação"><small class="payment-help text-muted">Comprovante, nota fiscal ou código PIX.</small></div>
+                                            <div class="payment-action"><button class="btn btn-success" type="submit">Pagar</button></div>
+                                        </form></div>
                                     {% else %}
                                         <span class="subtle">Abra o caixa</span>
                                     {% endif %}

@@ -3,7 +3,7 @@ from decimal import Decimal
 from django import forms
 from django.core.exceptions import ValidationError
 from django.utils.formats import number_format
-from .models import Adicional, Cliente, Comanda, Mesa, Pagamento, Produto, BaixaContaPagar
+from .models import Adicional, Cliente, Comanda, Fornecedor, Mesa, Pagamento, Produto, BaixaContaPagar
 
 
 class NovaComandaForm(forms.Form):
@@ -55,9 +55,9 @@ class AdicionarItemForm(forms.Form):
 
 
 class PagamentoForm(forms.Form):
-    forma = forms.ChoiceField(choices=Pagamento.Forma.choices)
-    valor = forms.DecimalField(min_value=Decimal("0.01"), max_digits=10, decimal_places=2)
-    referencia = forms.CharField(required=False, max_length=100)
+    forma = forms.ChoiceField(choices=Pagamento.Forma.choices, label="Forma de pagamento", widget=forms.Select(attrs={"class": "form-select"}))
+    valor = forms.DecimalField(min_value=Decimal("0.01"), max_digits=10, decimal_places=2, label="Valor", widget=forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "inputmode": "decimal"}))
+    referencia = forms.CharField(required=False, max_length=100, label="Referência", widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Documento ou código da transação"}), help_text="Opcional. Use para número do comprovante, nota fiscal ou código PIX; deixe em branco se não houver.")
 
     def clean_valor(self):
         valor = self.cleaned_data["valor"]
@@ -89,7 +89,10 @@ class EncerrarComandaForm(forms.Form):
 
 class NovaContaPagarForm(forms.Form):
     descricao = forms.CharField(max_length=180, label="Descrição")
-    fornecedor = forms.CharField(max_length=150, required=False, label="Fornecedor")
+    fornecedor = forms.ModelChoiceField(
+        queryset=Fornecedor.objects.filter(ativo=True).order_by("nome"),
+        required=False, label="Fornecedor", empty_label="Selecione um fornecedor",
+    )
     valor_total = forms.DecimalField(min_value=Decimal("0.01"), max_digits=10, decimal_places=2, label="Valor")
     vencimento = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}), label="Vencimento")
     observacao = forms.CharField(required=False, label="Observação", widget=forms.Textarea(attrs={"rows": 2}))
@@ -98,4 +101,7 @@ class NovaContaPagarForm(forms.Form):
 class BaixaContaPagarForm(forms.Form):
     forma = forms.ChoiceField(choices=BaixaContaPagar.Forma.choices, label="Forma de pagamento")
     valor = forms.DecimalField(min_value=Decimal("0.01"), max_digits=10, decimal_places=2, label="Valor pago")
-    referencia = forms.CharField(required=False, max_length=100, label="Referência")
+    referencia = forms.CharField(
+        required=False, max_length=100, label="Referência",
+        help_text="Opcional. Informe o número do documento ou código da transação; deixe em branco se não houver.",
+    )

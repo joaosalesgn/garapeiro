@@ -1,0 +1,64 @@
+.payment-entry {
+    display: grid;
+    grid-template-columns: minmax(145px, 1fr) minmax(105px, 140px) minmax(175px, 1.2fr) auto;
+    align-items: end;
+    gap: .65rem;
+    min-width: 560px
+}
+
+.payment-entry .form-select,
+.payment-entry .form-control {
+    width: 100%;
+    max-width: none;
+    min-height: 42px
+}
+
+.payment-entry .payment-control {
+    min-width: 0
+}
+
+.payment-entry label {
+    margin-bottom: .3rem;
+    font-size: .82rem
+}
+
+.payment-entry .payment-help {
+    display: block;
+    margin-top: .25rem;
+    line-height: 1.25
+}
+
+.payment-entry .btn {
+    min-height: 42px;
+    white-space: nowrap
+}
+
+.payment-scroll {
+    overflow-x: auto;
+    padding-bottom: .35rem
+}
+
+@media(max-width:900px) {
+    .payment-entry {
+        grid-template-columns: minmax(140px, 1fr) minmax(120px, .8fr);
+        min-width: 0
+    }
+
+    .payment-entry .payment-action {
+        grid-column: 1/-1
+    }
+
+    .payment-entry .payment-action .btn {
+        width: 100%
+    }
+}
+
+@media(max-width:520px) {
+    .payment-entry {
+        grid-template-columns: 1fr
+    }
+
+    .payment-entry .payment-action {
+        grid-column: auto
+    }
+}
