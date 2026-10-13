@@ -51,9 +51,6 @@
     {% if pode_abrir_comanda %}
         <div class="toolbar">
             <a class="btn" href="{% url 'atendimento:nova_comanda' %}">＋ Abrir comanda</a>
-            {% if pode_atendimento %}
-                <a class="btn secondary" href="{% url 'atendimento:comandas' %}">Ver comandas</a>
-            {% endif %}
         </div>
     {% endif %}
     {% if pode_atendimento %}

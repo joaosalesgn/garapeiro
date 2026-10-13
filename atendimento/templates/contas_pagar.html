@@ -42,7 +42,7 @@
                         <th>Pago</th>
                         <th>Saldo</th>
                         <th>Status</th>
-                        <th>Forma</th>
+                        <th>Forma de pagamento</th>
                         <th>Valor da baixa</th>
                         <th>Referência <span class="text-muted fw-normal">(opcional)</span></th>
                         <th>Ação</th>
@@ -116,7 +116,7 @@
                                         action="{% url 'atendimento:baixar_conta_pagar' conta.pk %}"
                                     >
                                         {% csrf_token %}
-                                        <button class="btn btn-success" type="submit" disabled>
+                                        <button class="btn btn-success" type="submit">
                                             Pagar
                                         </button>
                                     </form>
@@ -144,30 +144,37 @@
     </section>
 
     <script>
-        document.querySelectorAll('.cp-payment-form').forEach(function (form) {
-            const contaId = form.id.replace('cp-payment-', '');
-            const forma = document.getElementById('forma-' + contaId);
-            const valor = document.getElementById('valor-' + contaId);
-            const botao = form.querySelector('button[type="submit"]');
+        (function () {
+            function configurarBotoesDeBaixa() {
+                document.querySelectorAll('form.cp-payment-form').forEach(function (form) {
+                    const id = form.id.replace('cp-payment-', '');
+                    const forma = document.getElementById('forma-' + id);
+                    const valor = document.getElementById('valor-' + id);
+                    const botao = form.querySelector('button[type="submit"]');
 
-            if (!forma || !valor || !botao) return;
+                    if (!forma || !valor || !botao) return;
 
-            function atualizarBotao() {
-                const valorInformado = Number(valor.value);
-                const saldoMaximo = Number(valor.max);
-                const valorValido = valor.value.trim() !== '' &&
-                    valor.validity.valid &&
-                    Number.isFinite(valorInformado) &&
-                    valorInformado > 0 &&
-                    valorInformado <= saldoMaximo;
+                    function atualizarBotao() {
+                        const valorValido = valor.value.trim() !== '' &&
+                            valor.checkValidity() &&
+                            Number.isFinite(Number(valor.value)) &&
+                            Number(valor.value) > 0;
 
-                botao.disabled = !(forma.value !== '' && valorValido);
+                        botao.disabled = !(forma.value !== '' && valorValido);
+                    }
+
+                    forma.addEventListener('change', atualizarBotao);
+                    valor.addEventListener('input', atualizarBotao);
+                    valor.addEventListener('change', atualizarBotao);
+                    atualizarBotao();
+                });
             }
 
-            forma.addEventListener('change', atualizarBotao);
-            valor.addEventListener('input', atualizarBotao);
-            valor.addEventListener('change', atualizarBotao);
-            atualizarBotao();
-        });
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', configurarBotoesDeBaixa);
+            } else {
+                configurarBotoesDeBaixa();
+            }
+        })();
     </script>
 {% endblock %}
