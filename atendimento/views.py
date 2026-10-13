@@ -6,7 +6,7 @@ from django.contrib.auth import views as auth_views
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required, permission_required
 from django.db import IntegrityError, transaction
-from django.db.models import Sum
+from django.db.models import Prefetch, Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -19,7 +19,7 @@ from .forms import (
 )
 from .models import (
     Caixa, Cliente, Comanda, ComandaItem, ItemAdicional, MovimentacaoCaixa, Pagamento,
-    ContaReceber, ContaPagar, BaixaContaPagar
+    ContaReceber, ContaPagar, BaixaContaPagar, Mesa,
 )
 
 
@@ -60,12 +60,25 @@ def inicio(request):
     pode_atendimento = request.user.has_perm("atendimento.view_comanda")
     pode_cozinha = request.user.has_perm("atendimento.view_comandaitem")
     pode_caixa = request.user.has_perm("atendimento.view_caixa")
+    pode_abrir_comanda = request.user.has_perm("atendimento.add_comanda")
     comandas_abertas = (
-        Comanda.objects.filter(status=Comanda.Status.ABERTA).select_related("mesa", "cliente")
+        Comanda.objects.filter(status=Comanda.Status.ABERTA)
         if pode_atendimento else Comanda.objects.none()
     )
+    mesas = (
+        Mesa.objects.filter(ativa=True).order_by("numero").prefetch_related(
+            Prefetch(
+                "comandas",
+                queryset=Comanda.objects.filter(status=Comanda.Status.ABERTA).only("pk", "mesa_id"),
+                to_attr="comandas_abertas",
+            )
+        )
+        if pode_atendimento or pode_abrir_comanda
+        else Mesa.objects.none()
+    )
     return render(request, "inicio.html", {
-        "comandas": comandas_abertas[:12], "total_comandas": comandas_abertas.count(),
+        "mesas": mesas, "total_mesas": mesas.count(),
+        "total_comandas": comandas_abertas.count(),
         "itens_cozinha": ComandaItem.objects.filter(
             status_producao=ComandaItem.StatusProducao.ENVIADO,
             comanda__status=Comanda.Status.ABERTA,
@@ -74,7 +87,7 @@ def inicio(request):
         "pode_atendimento": pode_atendimento,
         "pode_cozinha": pode_cozinha,
         "pode_caixa": pode_caixa,
-        "pode_abrir_comanda": request.user.has_perm("atendimento.add_comanda"),
+        "pode_abrir_comanda": pode_abrir_comanda,
         "pode_movimentar": request.user.has_perm("atendimento.add_movimentacaocaixa"),
         "movimentacao_form": MovimentacaoForm() if request.user.has_perm("atendimento.add_movimentacaocaixa") else None,
         "caixa_disponivel": _caixa_aberto() is not None if request.user.has_perm("atendimento.add_movimentacaocaixa") else False,
@@ -92,7 +105,10 @@ def comandas(request):
 @login_required
 @permission_required("atendimento.add_comanda", raise_exception=True)
 def nova_comanda(request):
-    form = NovaComandaForm(request.POST or None)
+    form = NovaComandaForm(
+        request.POST or None,
+        initial={"mesa": request.GET.get("mesa")} if request.method == "GET" else None,
+    )
     if request.method == "POST" and form.is_valid():
         dados = form.cleaned_data
         comanda = Comanda.objects.create(

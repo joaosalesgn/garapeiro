@@ -1,6 +1,10 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block title %}
     Visão geral
+{% endblock %}
+{% block page_css %}
+    <link href="{% static 'css/inicio.css' %}" rel="stylesheet">
 {% endblock %}
 {% block content %}
     <h1>
@@ -53,34 +57,51 @@
             <a class="btn" href="{% url 'atendimento:nova_comanda' %}">＋ Abrir comanda</a>
         </div>
     {% endif %}
-    {% if pode_atendimento %}
-        <section class="card list-card">
-            <h2>
-                Comandas em andamento
-            </h2>
-            {% for comanda in comandas %}
-                <div class="list-row">
-                    <div class="list-row-main">
-                        <strong><a href="{% url 'atendimento:comanda' comanda.pk %}">Comanda #{{ comanda.pk }}</a></strong>
-                        <div class="subtle">
-                            {{ comanda.get_canal_display }}
-                            {% if comanda.mesa %}
-                                · Mesa {{ comanda.mesa.numero }}
-                            {% endif %}
-                            {% if comanda.cliente %}
-                                · {{ comanda.cliente.nome }}
-                            {% endif %}
-                        </div>
-                    </div>
-                    <div class="total">
-                        R$ {{ comanda.total|floatformat:2 }}
-                    </div>
+    {% if pode_atendimento or pode_abrir_comanda %}
+        <section class="card">
+            <div class="tables-heading">
+                <div>
+                    <h2>Mesas</h2>
+                    <p class="subtle">{{ total_mesas }} mesas ativas cadastradas.</p>
                 </div>
-            {% empty %}
-                <div class="empty">
-                    Nenhuma comanda aberta no momento.
+                <div class="tables-legend" aria-label="Legenda das mesas">
+                    <span><i class="table-legend-dot table-legend-free"></i>Livre</span>
+                    <span><i class="table-legend-dot table-legend-busy"></i>Ocupada</span>
                 </div>
-            {% endfor %}
+            </div>
+            <div class="tables-grid">
+                {% for mesa in mesas %}
+                    {% with comanda=mesa.comandas_abertas.0 %}
+                        {% if comanda and pode_atendimento %}
+                            <a class="table-tile table-tile-busy" href="{% url 'atendimento:comanda' comanda.pk %}" aria-label="Mesa {{ mesa.numero }}, ocupada. Abrir comanda {{ comanda.pk }}">
+                                <span class="table-tile-label">Mesa</span>
+                                <strong class="table-tile-number">{{ mesa.numero }}</strong>
+                                <span class="table-tile-status">Ocupada · Comanda #{{ comanda.pk }}</span>
+                            </a>
+                        {% elif comanda %}
+                            <div class="table-tile table-tile-busy table-tile-static" aria-label="Mesa {{ mesa.numero }}, ocupada">
+                                <span class="table-tile-label">Mesa</span>
+                                <strong class="table-tile-number">{{ mesa.numero }}</strong>
+                                <span class="table-tile-status">Ocupada</span>
+                            </div>
+                        {% elif pode_abrir_comanda %}
+                            <a class="table-tile table-tile-free" href="{% url 'atendimento:nova_comanda' %}?mesa={{ mesa.pk }}" aria-label="Mesa {{ mesa.numero }}, livre. Abrir comanda">
+                                <span class="table-tile-label">Mesa</span>
+                                <strong class="table-tile-number">{{ mesa.numero }}</strong>
+                                <span class="table-tile-status">Livre · Abrir comanda</span>
+                            </a>
+                        {% else %}
+                            <div class="table-tile table-tile-free table-tile-static" aria-label="Mesa {{ mesa.numero }}, livre">
+                                <span class="table-tile-label">Mesa</span>
+                                <strong class="table-tile-number">{{ mesa.numero }}</strong>
+                                <span class="table-tile-status">Livre</span>
+                            </div>
+                        {% endif %}
+                    {% endwith %}
+                {% empty %}
+                    <div class="empty tables-empty">Nenhuma mesa ativa cadastrada.</div>
+                {% endfor %}
+            </div>
         </section>
     {% endif %}
     {% if pode_movimentar %}

@@ -19,6 +19,29 @@ class OperacaoAtendimentoTests(TestCase):
         self.client.logout()
         self.assertEqual(self.client.get(reverse("atendimento:inicio")).status_code, 302)
 
+    def test_inicio_exibe_mesas_ativas_com_estado_e_links_corretos(self):
+        mesa_livre = Mesa.objects.create(numero=2)
+        Mesa.objects.create(numero=3, ativa=False)
+        comanda = Comanda.objects.create(mesa=self.mesa, criado_por=self.user)
+
+        resposta = self.client.get(reverse("atendimento:inicio"))
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Mesa 1, ocupada")
+        self.assertContains(resposta, reverse("atendimento:comanda", kwargs={"pk": comanda.pk}))
+        self.assertContains(resposta, f"{reverse('atendimento:nova_comanda')}?mesa={mesa_livre.pk}")
+        self.assertContains(resposta, "Mesa 2, livre")
+        self.assertNotContains(resposta, "Mesa 3")
+        self.assertNotContains(resposta, "Comandas em andamento")
+        self.assertEqual(resposta.context["total_mesas"], 2)
+
+    def test_mesa_selecionada_no_painel_preenche_formulario_de_nova_comanda(self):
+        resposta = self.client.get(reverse("atendimento:nova_comanda"), {"mesa": self.mesa.pk})
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(str(resposta.context["form"]["mesa"].value()), str(self.mesa.pk))
+        self.assertContains(resposta, f'<option value="{self.mesa.pk}" selected')
+
     def test_abre_comanda_para_mesa(self):
         resposta = self.client.post(reverse("atendimento:nova_comanda"), {"canal": Comanda.Canal.MESA, "mesa": self.mesa.pk, "cliente": "", "observacao": ""})
         comanda = Comanda.objects.get()

@@ -1,0 +1,147 @@
+.tables-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px
+}
+
+.tables-heading h2 {
+    margin-bottom: 4px
+}
+
+.tables-heading p {
+    margin: 0
+}
+
+.tables-legend {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    color: var(--muted);
+    font-size: 14px
+}
+
+.tables-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px
+}
+
+.table-legend-dot {
+    width: 12px;
+    height: 12px;
+    display: inline-block;
+    border: 1px solid #cfd3c8;
+    border-radius: 50%
+}
+
+.table-legend-free {
+    background: #fff
+}
+
+.table-legend-busy {
+    background: #2f8a4d;
+    border-color: #2f8a4d
+}
+
+.tables-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(142px, 1fr));
+    gap: 14px
+}
+
+.table-tile {
+    min-height: 142px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 14px 10px;
+    border: 1px solid #d8dbd1;
+    border-radius: 14px;
+    text-align: center;
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease
+}
+
+.table-tile:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 7px 18px #20231916;
+    text-decoration: none
+}
+
+.table-tile:focus-visible {
+    outline: 3px solid #276b4350;
+    outline-offset: 2px
+}
+
+.table-tile-free {
+    background: #fff;
+    color: var(--ink)
+}
+
+.table-tile-free:hover {
+    border-color: var(--green);
+    color: var(--green)
+}
+
+.table-tile-busy {
+    background: #2f8a4d;
+    border-color: #267541;
+    color: #fff
+}
+
+.table-tile-busy:hover {
+    background: #267541;
+    color: #fff
+}
+
+.table-tile-static {
+    cursor: default
+}
+
+.table-tile-static:hover {
+    transform: none;
+    box-shadow: none
+}
+
+.table-tile-label {
+    font-size: 13px;
+    font-weight: 650;
+    opacity: .8
+}
+
+.table-tile-number {
+    font-size: 36px;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums
+}
+
+.table-tile-status {
+    max-width: 100%;
+    margin-top: 5px;
+    font-size: 13px;
+    line-height: 1.25;
+    overflow-wrap: anywhere
+}
+
+.tables-empty {
+    grid-column: 1 / -1
+}
+
+@media (max-width: 520px) {
+    .tables-heading {
+        flex-direction: column
+    }
+
+    .tables-grid {
+        grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+        gap: 10px
+    }
+
+    .table-tile {
+        min-height: 126px
+    }
+}

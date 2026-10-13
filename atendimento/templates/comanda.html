@@ -6,7 +6,7 @@
 {% block extra_css %}<link href="{% static 'css/comanda.css' %}" rel="stylesheet">{% endblock %}
 {% block content %}
     <div class="toolbar">
-        <a href="{% url 'atendimento:comandas' %}">← Atendimento</a><span class="pill {% if comanda.status != 'ABERTA' %}warn{% endif %}">{{ comanda.get_status_display }}</span>
+        <a href="{% url 'atendimento:inicio' %}">← Atendimento</a><span class="pill {% if comanda.status != 'ABERTA' %}warn{% endif %}">{{ comanda.get_status_display }}</span>
     </div>
     <h1>
         Comanda #{{ comanda.pk }}
