@@ -34,6 +34,7 @@ class AdicionarItemForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["adicionais"].widget = forms.CheckboxSelectMultiple()
         self.fields["produto"].label_from_instance = lambda produto: (
             f"{produto.nome} ——— {produto.categoria.nome} —— R$ {number_format(produto.preco, decimal_pos=2, use_l10n=True)}"
         )
@@ -52,6 +53,18 @@ class AdicionarItemForm(forms.Form):
             if any(adicional.pk not in permitidos for adicional in adicionais):
                 raise ValidationError("Um ou mais adicionais não estão habilitados para este produto.")
         return dados
+
+
+class TesteImpressaoForm(forms.Form):
+    produto = forms.ModelChoiceField(
+        queryset=Produto.objects.filter(ativo=True).select_related("categoria"),
+        label="Produto", empty_label="Selecione um produto",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    quantidade = forms.IntegerField(
+        min_value=1, max_value=999, initial=1, label="Quantidade",
+        widget=forms.NumberInput(attrs={"class": "form-control", "min": "1", "max": "999"}),
+    )
 
 
 class PagamentoForm(forms.Form):

@@ -1,4 +1,5 @@
 from decimal import Decimal
+import os
 
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
@@ -16,7 +17,9 @@ from django.views.decorators.http import require_POST
 from .forms import (
     AbrirCaixaForm, AdicionarItemForm, FecharCaixaForm, MovimentacaoForm,
     NovaComandaForm, PagamentoForm, EncerrarComandaForm, NovaContaPagarForm, BaixaContaPagarForm,
+    TesteImpressaoForm,
 )
+from .impressao import ErroImpressao, imprimir_itens_cozinha, imprimir_itens_consumo, imprimir_teste_produto
 from .models import (
     Caixa, Cliente, Comanda, ComandaItem, ItemAdicional, MovimentacaoCaixa, Pagamento,
     ContaReceber, ContaPagar, BaixaContaPagar, Mesa,
@@ -103,6 +106,22 @@ def comandas(request):
 
 
 @login_required
+@permission_required("atendimento.view_produto", raise_exception=True)
+def teste_impressao_produto(request):
+    nome_impressora = os.environ.get("GARAPEIRO_IMPRESSORA", "POS-80").strip() or "POS-80"
+    form = TesteImpressaoForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        try:
+            imprimir_teste_produto(form.cleaned_data["produto"], form.cleaned_data["quantidade"], nome_impressora)
+        except ErroImpressao as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(request, f"Comprovante de teste enviado para {nome_impressora}.")
+            form = TesteImpressaoForm()
+    return render(request, "teste_impressao.html", {"form": form, "nome_impressora": nome_impressora})
+
+
+@login_required
 @permission_required("atendimento.add_comanda", raise_exception=True)
 def nova_comanda(request):
     form = NovaComandaForm(
@@ -130,7 +149,63 @@ def detalhe_comanda(request, pk):
     return render(request, "comanda.html", {
         "comanda": comanda, "caixa": caixa, "item_form": item_form,
         "pagamento_form": pagamento_form, "clientes": Cliente.objects.filter(ativo=True),
+        "itens_cozinha_total": ComandaItem.objects.filter(comanda=comanda, produto__vai_para_cozinha=True).exclude(status_producao=ComandaItem.StatusProducao.CANCELADO).count(),
+        "itens_cozinha_pendentes": ComandaItem.objects.filter(comanda=comanda, produto__vai_para_cozinha=True, cozinha_impresso_em__isnull=True).exclude(status_producao=ComandaItem.StatusProducao.CANCELADO).count(),
+        "itens_consumo_total": comanda.itens.exclude(status_producao=ComandaItem.StatusProducao.CANCELADO).count(),
     })
+
+
+@login_required
+@require_POST
+@permission_required("atendimento.view_comanda", raise_exception=True)
+def imprimir_comanda_cozinha(request, pk):
+    nome_impressora = os.environ.get("GARAPEIRO_IMPRESSORA", "POS-80").strip() or "POS-80"
+    reimprimir_tudo = request.POST.get("reimprimir_tudo") == "1"
+    try:
+        with transaction.atomic():
+            comanda = get_object_or_404(Comanda.objects.select_for_update().select_related("mesa", "cliente"), pk=pk)
+            base = ComandaItem.objects.select_for_update().filter(
+                comanda=comanda, produto__vai_para_cozinha=True
+            ).exclude(status_producao=ComandaItem.StatusProducao.CANCELADO)
+            itens = list(base.prefetch_related("adicionais")) if reimprimir_tudo else list(
+                base.filter(cozinha_impresso_em__isnull=True).prefetch_related("adicionais")
+            )
+            if not itens:
+                messages.info(request, "Todos os produtos da cozinha já foram impressos.")
+                return redirect("atendimento:comanda", pk=pk)
+            if comanda.status != Comanda.Status.ABERTA:
+                messages.error(request, "Só é possível enviar produtos de uma comanda aberta à cozinha.")
+                return redirect("atendimento:comanda", pk=pk)
+            # Marca após envio aceito pelo spooler: falha não consome itens pendentes.
+            imprimir_itens_cozinha(comanda, itens, nome_impressora)
+            ComandaItem.objects.filter(pk__in=[item.pk for item in itens]).update(cozinha_impresso_em=timezone.now())
+    except ErroImpressao as exc:
+        messages.error(request, str(exc))
+    else:
+        mensagem = "Todos os produtos da cozinha foram reimpressos." if reimprimir_tudo else f"{len(itens)} item(ns) enviado(s) à cozinha."
+        messages.success(request, mensagem)
+    return redirect("atendimento:comanda", pk=pk)
+
+
+@login_required
+@require_POST
+@permission_required("atendimento.view_comanda", raise_exception=True)
+def imprimir_comanda_consumo(request, pk):
+    comanda = get_object_or_404(Comanda.objects.select_related("mesa", "cliente"), pk=pk)
+    itens = list(comanda.itens.exclude(
+        status_producao=ComandaItem.StatusProducao.CANCELADO
+    ).prefetch_related("adicionais"))
+    if not itens:
+        messages.info(request, "Esta comanda ainda não possui itens para imprimir.")
+        return redirect("atendimento:comanda", pk=pk)
+    nome_impressora = os.environ.get("GARAPEIRO_IMPRESSORA", "POS-80").strip() or "POS-80"
+    try:
+        imprimir_itens_consumo(comanda, itens, nome_impressora)
+    except ErroImpressao as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, "Conferência de consumo enviada para impressão.")
+    return redirect("atendimento:comanda", pk=pk)
 
 
 @login_required
@@ -257,10 +332,6 @@ def fechar_comanda(request, pk):
             messages.error(request, "Adicione pelo menos um item válido antes de encerrar.")
         elif comanda.saldo < 0:
             messages.error(request, "O total recebido não pode superar o valor da comanda.")
-        elif comanda.itens.exclude(status_producao=ComandaItem.StatusProducao.CANCELADO).exclude(
-            status_producao=ComandaItem.StatusProducao.PRONTO
-        ).exists():
-            messages.error(request, "A comanda só pode ser encerrada depois que todos os itens ficarem prontos.")
         else:
             cliente = form.cleaned_data.get("cliente") or comanda.cliente
             if comanda.saldo > 0 and not cliente:

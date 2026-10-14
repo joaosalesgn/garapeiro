@@ -3,14 +3,25 @@
 {% block title %}
     Comanda #{{ comanda.pk }}
 {% endblock %}
-{% block extra_css %}<link href="{% static 'css/comanda.css' %}" rel="stylesheet">{% endblock %}
+{% block page_css %}<link href="{% static 'css/comanda.css' %}" rel="stylesheet">{% endblock %}
 {% block content %}
     <div class="toolbar">
         <a href="{% url 'atendimento:inicio' %}">← Atendimento</a><span class="pill {% if comanda.status != 'ABERTA' %}warn{% endif %}">{{ comanda.get_status_display }}</span>
     </div>
-    <h1>
-        Comanda #{{ comanda.pk }}
-    </h1>
+    <div class="comanda-heading">
+        <h1>Comanda #{{ comanda.pk }}</h1>
+        <div class="comanda-print-actions">
+            {% if comanda.status == 'ABERTA' %}
+                <form method="post" action="{% url 'atendimento:imprimir_comanda_cozinha' comanda.pk %}" data-cozinha-form data-pendentes="{{ itens_cozinha_pendentes }}" data-total="{{ itens_cozinha_total }}">
+                    {% csrf_token %}<input type="hidden" name="reimprimir_tudo" value="0" data-reimprimir-tudo>
+                    <button class="btn btn-warning" type="submit" {% if not itens_cozinha_total %}disabled{% endif %}>Cozinha{% if itens_cozinha_pendentes %} ({{ itens_cozinha_pendentes }} novos){% endif %}</button>
+                </form>
+            {% endif %}
+            <form method="post" action="{% url 'atendimento:imprimir_comanda_consumo' comanda.pk %}">
+                {% csrf_token %}<button class="btn btn-primary" type="submit" {% if not itens_consumo_total %}disabled{% endif %}>Imprimir consumo</button>
+            </form>
+        </div>
+    </div>
     <div class="grid">
         <section class="card">
             <div class="muted">
@@ -137,9 +148,9 @@
                         {% endfor %}
                         <div class="field">
                             <label>Adicionais</label>
-                            <div id="adicionais-opcoes" class="stack">
+                            <div id="adicionais-opcoes" class="additional-options">
                                 {% for checkbox in item_form.adicionais %}
-                                    <label style="display:flex;align-items:center;gap:9px;font-weight:500">{{ checkbox.tag }} {{ checkbox.choice_label }}</label>
+                                    <label class="additional-option">{{ checkbox.tag }} <span>{{ checkbox.choice_label }}</span></label>
                                 {% empty %}
                                     <span class="subtle">Escolha um produto para ver os adicionais disponíveis.</span>
                                 {% endfor %}
@@ -249,6 +260,22 @@
     {% endif %}
     <script>
   (function () {
+    const cozinhaForm = document.querySelector('[data-cozinha-form]');
+    if (cozinhaForm) {
+      cozinhaForm.addEventListener('submit', function (event) {
+        const pendentes = Number(cozinhaForm.dataset.pendentes || 0);
+        const total = Number(cozinhaForm.dataset.total || 0);
+        const campo = cozinhaForm.querySelector('[data-reimprimir-tudo]');
+        campo.value = '0';
+        if (total > 0 && pendentes === 0) {
+          if (!window.confirm('Todos os produtos da cozinha já foram impressos. Deseja imprimir todos novamente?')) {
+            event.preventDefault();
+            return;
+          }
+          campo.value = '1';
+        }
+      });
+    }
     const produto = document.getElementById('id_produto');
     const adicionais = document.getElementById('adicionais-opcoes');
     if (!produto || !adicionais) return;

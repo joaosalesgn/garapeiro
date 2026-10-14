@@ -1,3 +1,51 @@
+.comanda-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 12px
+}
+
+.comanda-heading h1 { margin: 0 }
+
+.comanda-print-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap
+}
+
+.comanda-print-actions form { margin: 0 }
+
+.additional-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, max-content));
+    gap: 8px 14px;
+    align-items: start
+}
+
+.additional-option {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: fit-content;
+    margin: 0;
+    font-weight: 500;
+    cursor: pointer
+}
+
+.additional-option input[type=checkbox] {
+    appearance: auto;
+    display: inline-block;
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    max-width: none;
+    margin: 0;
+    accent-color: #216a43
+}
+
 .payment-form-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -5,23 +53,13 @@
     align-items: end
 }
 
-.payment-form-grid .field {
-    min-width: 0;
-    margin-bottom: .8rem
-}
-
+.payment-form-grid .field { min-width: 0; margin-bottom: .8rem }
 .payment-form-grid select,
-.payment-form-grid input {
-    max-width: none
-}
-
-.payment-form-help {
-    margin-top: .25rem
-}
+.payment-form-grid input { max-width: none }
+.payment-form-help { margin-top: .25rem }
 
 @media(max-width:720px) {
-    .payment-form-grid {
-        grid-template-columns: 1fr;
-        gap: 0
-    }
+    .comanda-heading { align-items: flex-start }
+    .comanda-print-actions { width: 100% }
+    .payment-form-grid { grid-template-columns: 1fr; gap: 0 }
 }

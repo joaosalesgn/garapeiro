@@ -226,6 +226,7 @@ class ComandaItem(RegistroBase):
     quantidade = models.PositiveSmallIntegerField(validators=[MinValueValidator(1)])
     preco_unitario = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     status_producao = models.CharField(max_length=10, choices=StatusProducao.choices, default=StatusProducao.PENDENTE)
+    cozinha_impresso_em = models.DateTimeField(null=True, blank=True, help_text="Data e hora em que o item foi enviado à impressora da cozinha.")
     observacao = models.CharField(max_length=250, blank=True)
 
     class Meta:
