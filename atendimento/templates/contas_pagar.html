@@ -60,21 +60,11 @@
                             <td>R$ {{ conta.valor_total|floatformat:2 }}</td>
                             <td>R$ {{ conta.total_pago|floatformat:2 }}</td>
                             <td>R$ {{ conta.saldo|floatformat:2 }}</td>
-                            <td>
-                                <span class="pill {% if conta.status != 'QUITADA' %}warn{% endif %}">
-                                    {{ conta.get_status_display }}
-                                </span>
-                            </td>
+                            <td><span class="pill {% if conta.status != 'QUITADA' %}warn{% endif %}">{{ conta.get_status_display }}</span></td>
 
                             {% if conta.saldo > 0 and pode_baixar and caixa_aberto %}
                                 <td>
-                                    <select
-                                        class="form-select cp-payment-input"
-                                        id="forma-{{ conta.pk }}"
-                                        name="forma"
-                                        form="cp-payment-{{ conta.pk }}"
-                                        required
-                                    >
+                                    <select class="form-select cp-payment-input" id="forma-{{ conta.pk }}" name="forma" form="cp-payment-{{ conta.pk }}" required>
                                         <option value="" selected>Selecione</option>
                                         <option value="DINHEIRO">Dinheiro</option>
                                         <option value="PIX">PIX</option>
@@ -84,37 +74,16 @@
                                     </select>
                                 </td>
                                 <td>
-                                    <input
-                                        class="form-control cp-payment-input"
-                                        id="valor-{{ conta.pk }}"
-                                        type="number"
-                                        name="valor"
-                                        form="cp-payment-{{ conta.pk }}"
-                                        min="0.01"
-                                        max="{{ conta.saldo }}"
-                                        step="0.01"
-                                        placeholder="0,00"
-                                        required
-                                    >
+                                    <input class="form-control cp-payment-input" id="valor-{{ conta.pk }}" type="number" name="valor"
+                                        form="cp-payment-{{ conta.pk }}" min="0.01" max="{{ conta.saldo }}" step="0.01"
+                                        placeholder="0,00" required >
                                 </td>
                                 <td>
-                                    <input
-                                        class="form-control cp-payment-input"
-                                        id="referencia-{{ conta.pk }}"
-                                        type="text"
-                                        name="referencia"
-                                        form="cp-payment-{{ conta.pk }}"
-                                        maxlength="100"
-                                        placeholder="Documento ou PIX"
-                                    >
+                                    <input class="form-control cp-payment-input" id="referencia-{{ conta.pk }}" type="text"
+                                        name="referencia" form="cp-payment-{{ conta.pk }}" maxlength="100" placeholder="Documento ou PIX">
                                 </td>
                                 <td>
-                                    <form
-                                        id="cp-payment-{{ conta.pk }}"
-                                        class="cp-payment-form"
-                                        method="post"
-                                        action="{% url 'atendimento:baixar_conta_pagar' conta.pk %}"
-                                    >
+                                    <form id="cp-payment-{{ conta.pk }}" class="cp-payment-form" method="post" action="{% url 'atendimento:baixar_conta_pagar' conta.pk %}">
                                         {% csrf_token %}
                                         <button class="btn btn-success" type="submit">
                                             Pagar

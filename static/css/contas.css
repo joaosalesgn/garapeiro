@@ -54,26 +54,26 @@
     min-width: 95px;
 }
 
-.cp-table .cp-payment-input {
+.cp-table .cp-payment-input .cr-payment-input {
     width: 100%;
     min-width: 0;
 }
 
-.cp-payment-form {
+.cp-payment-form .cr-payment-form {
     margin: 0;
 }
 
-.cp-payment-form .btn {
+.cp-payment-form .cr-payment-form .btn {
     width: 100%;
     min-height: 38px;
     white-space: nowrap;
 }
 
-.cp-payment-form .btn:disabled {
+.cp-payment-form .cr-payment-form .btn:disabled {
     cursor: not-allowed;
     opacity: 0.55;
 }
 
-.cp-payment-unavailable {
+.cp-payment-unavailable .cr-payment-unavailable {
     min-width: 570px;
 }

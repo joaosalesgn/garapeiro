@@ -1,100 +1,128 @@
 {% extends 'base.html' %}
 {% load static %}
 {% block title %}
-    Contas a receber
+Contas a receber
 {% endblock %}
-{% block extra_css %}<link href="{% static 'css/contas.css' %}" rel="stylesheet">{% endblock %}
+{% block extra_css %}
+<link href="{% static 'css/contas.css' %}" rel="stylesheet">{% endblock %}
 {% block content %}
-    <h1>
-        Contas a receber
-    </h1>
-    <p class="muted">
-        Cada comanda encerrada gera um CR; os recebimentos ficam vinculados ao próprio registro.
-    </p>
-    <section class="card">
-        <div class="table-wrap">
-            <table class="table table-striped align-middle">
-                <thead>
-                    <tr>
-                        <th>
-                            CR / comanda
-                        </th>
-                        <th>
-                            Cliente
-                        </th>
-                        <th>
-                            Vencimento
-                        </th>
-                        <th>
-                            Valor
-                        </th>
-                        <th>
-                            Recebido
-                        </th>
-                        <th>
-                            Saldo
-                        </th>
-                        <th>
-                            Status
-                        </th>
-                        <th>
-                            Receber
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for conta in contas %}
-                        <tr>
-                            <td>
-                                #{{ conta.pk }} / <a href="{% url 'atendimento:comanda' conta.comanda_id %}">Comanda #{{ conta.comanda_id }}</a>
-                            </td>
-                            <td>
-                                {{ conta.cliente|default:'—' }}
-                            </td>
-                            <td>
-                                {{ conta.vencimento|date:'d/m/Y' }}
-                            </td>
-                            <td>
-                                R$ {{ conta.valor_total|floatformat:2 }}
-                            </td>
-                            <td>
-                                R$ {{ conta.total_recebido|floatformat:2 }}
-                            </td>
-                            <td>
-                                R$ {{ conta.saldo|floatformat:2 }}
-                            </td>
-                            <td>
-                                <span class="pill {% if conta.status == 'QUITADA' %}{% else %}warn{% endif %}">{{ conta.get_status_display }}</span>
-                            </td>
-                            <td>
-                                {% if conta.saldo > 0 and pode_receber %}
-                                    {% if caixa_aberto %}
-                                        <div class="payment-scroll"><form class="payment-entry" method="post" action="{% url 'atendimento:receber_conta' conta.pk %}">
-                                            {% csrf_token %}
-                                            <div class="payment-control"><label for="forma-{{ conta.pk }}">Forma</label><select class="form-select" id="forma-{{ conta.pk }}" name="forma"><option value="DINHEIRO">Dinheiro</option><option value="PIX">PIX</option><option value="CREDITO">Cartão de crédito</option><option value="DEBITO">Cartão de débito</option><option value="OUTRO">Outro</option></select></div>
-                                            <div class="payment-control"><label for="valor-{{ conta.pk }}">Valor</label><input class="form-control" id="valor-{{ conta.pk }}" type="number" name="valor" min="0.01" max="{{ conta.saldo }}" step="0.01" value="{{ conta.saldo }}" required></div>
-                                            <div class="payment-control"><label for="referencia-{{ conta.pk }}">Referência <span class="text-muted fw-normal">(opcional)</span></label><input class="form-control" id="referencia-{{ conta.pk }}" type="text" name="referencia" maxlength="100" placeholder="Nº de documento ou transação"><small class="payment-help text-muted">Comprovante, nota fiscal ou código PIX.</small></div>
-                                            <div class="payment-action"><button class="btn btn-success" type="submit">Receber</button></div>
-                                        </form></div>
-                                    {% else %}
-                                        <span class="subtle">Abra o caixa</span>
-                                    {% endif %}
-                                {% else %}
-                                    —
-                                {% endif %}
-                            </td>
-                        </tr>
-                    {% empty %}
-                        <tr>
-                            <td colspan="8">
-                                <div class="empty">
-                                    Nenhuma conta a receber registrada.
-                                </div>
-                            </td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </section>
+<h1>
+    Contas a receber
+</h1>
+<p class="muted">
+    Cada comanda encerrada gera um CR; os recebimentos ficam vinculados ao próprio registro.
+</p>
+<section class="card">
+    <div class="table-wrap">
+        <table class="table table-striped align-middle">
+            <thead>
+                <tr>
+                    <th>CR / comanda</th>
+                    <th>Cliente</th>
+                    <th>Vencimento</th>
+                    <th>Valor</th>
+                    <th>Recebido</th>
+                    <th>Saldo</th>
+                    <th>Status</th>
+                    <th>Forma de recebimento</th>
+                    <th>Valor da baixa</th>
+                    <th>Referência <span class="text-muted fw-normal">(opcional)</span></th>
+                    <th>Ação</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for conta in contas %}
+                <tr>
+                    <td>#{{ conta.pk }} / <a href="{% url 'atendimento:comanda' conta.comanda_id %}">Comanda #{{ conta.comanda_id }}</a></td>
+                    <td>{{ conta.cliente|default:'—' }}</td>
+                    <td>{{ conta.vencimento|date:'d/m/Y' }}</td>
+                    <td>R$ {{ conta.valor_total|floatformat:2 }}</td>
+                    <td>R$ {{ conta.total_recebido|floatformat:2 }}</td>
+                    <td>R$ {{ conta.saldo|floatformat:2 }}</td>
+                    <td><span class="pill {% if conta.status == 'QUITADA' %}{% else %}warn{% endif %}">{{ conta.get_status_display }}</span></td>
+                    
+                    {% if conta.saldo > 0 and pode_receber and caixa_aberto %}
+                        <td>
+                            <select class="form-select cr-payment-input" id="forma-{{ conta.pk }}" name="forma" form="cr-payment-{{ conta.pk }}" required>
+                                <option value="" selected>Selecione</option>
+                                <option value="DINHEIRO">Dinheiro</option>
+                                <option value="PIX">PIX</option>
+                                <option value="CREDITO">Cartão crédito</option>
+                                <option value="DEBITO">Cartão débito</option>
+                                <option value="OUTRO">Outro</option>
+                            </select>
+                        </td>
+                        <td>
+                            <input class="form-control cr-payment-input" id="valor-{{ conta.pk }}" type="number"
+                                name="valor" form="cr-payment-{{ conta.pk }}" min="0.01"
+                                max="{{ conta.saldo }}" step="0.01" placeholder="0,00" required>
+                        </td>
+                        <td>
+                            <input
+                                class="form-control cr-payment-input" id="referencia-{{ conta.pk }}" type="text"
+                                name="referencia" form="cr-payment-{{ conta.pk }}"
+                                maxlength="100" placeholder="Documento ou PIX">
+                        </td>
+                        <td>
+                            <form id="cr-payment-{{ conta.pk }}" class="cr-payment-form" method="post" action="{% url 'atendimento:receber_conta' conta.pk %}">
+                                {% csrf_token %}
+                                <button class="btn btn-success" type="submit"> Receber </button>
+                            </form>
+                        </td>
+                    {% else %}
+                        <td colspan="4" class="cr-payment-unavailable">
+                            {% if conta.saldo > 0 and pode_receber and not caixa_aberto %}
+                                <span class="subtle">Abra o caixa para registrar o recebimento.</span>
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                    {% endif %}
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty">Nenhuma conta a receber registrada.</div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<script>
+    (function () {
+        function configurarBotoesDeRecebimento() {
+            document.querySelectorAll('form.cr-payment-form').forEach(function (form) {
+                const id = form.id.replace('cr-payment-', '');
+                const forma = document.getElementById('forma-' + id);
+                const valor = document.getElementById('valor-' + id);
+                const botao = form.querySelector('button[type="submit"]');
+
+                if (!forma || !valor || !botao) return;
+
+                function atualizarBotao() {
+                    const valorValido = valor.value.trim() !== '' &&
+                        valor.checkValidity() &&
+                        Number.isFinite(Number(valor.value)) &&
+                        Number(valor.value) > 0;
+
+                    botao.disabled = !(forma.value !== '' && valorValido);
+                }
+
+                forma.addEventListener('change', atualizarBotao);
+                valor.addEventListener('input', atualizarBotao);
+                valor.addEventListener('change', atualizarBotao);
+                atualizarBotao();
+            });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', configurarBotoesDeRecebimento);
+        } else {
+            configurarBotoesDeRecebimento();
+        }
+    })();
+</script>
 {% endblock %}
