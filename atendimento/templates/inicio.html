@@ -104,6 +104,27 @@
             </div>
         </section>
     {% endif %}
+    {% if comandas_balcao_entrega %}
+        <section class="card">
+            <div class="tables-heading">
+                <div>
+                    <h2>Comandas de balcão e entrega</h2>
+                    <p class="subtle">Comandas abertas fora das mesas.</p>
+                </div>
+            </div>
+            <div class="tables-grid">
+                {% for comanda in comandas_balcao_entrega %}
+                    <a class="table-tile table-tile-busy" href="{% url 'atendimento:comanda' comanda.pk %}" aria-label="{{ comanda.get_canal_display }}, comanda {{ comanda.pk }}. Abrir comanda">
+                        <span class="table-tile-label">{{ comanda.get_canal_display }}</span>
+                        <strong class="table-tile-number">#{{ comanda.pk }}</strong>
+                        <span class="table-tile-status">
+                            {% if comanda.cliente %}{{ comanda.cliente.nome }}{% else %}Aberta{% endif %}
+                        </span>
+                    </a>
+                {% endfor %}
+            </div>
+        </section>
+    {% endif %}
     {% if pode_movimentar %}
         <section class="card">
             <h2>

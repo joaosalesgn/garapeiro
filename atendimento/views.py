@@ -79,8 +79,16 @@ def inicio(request):
         if pode_atendimento or pode_abrir_comanda
         else Mesa.objects.none()
     )
+    comandas_balcao_entrega = (
+        Comanda.objects.filter(
+            status=Comanda.Status.ABERTA,
+            canal__in=[Comanda.Canal.BALCAO, Comanda.Canal.ENTREGA],
+        ).select_related("cliente").order_by("canal", "-criado_em")
+        if pode_atendimento else Comanda.objects.none()
+    )
     return render(request, "inicio.html", {
         "mesas": mesas, "total_mesas": mesas.count(),
+        "comandas_balcao_entrega": comandas_balcao_entrega,
         "total_comandas": comandas_abertas.count(),
         "itens_cozinha": ComandaItem.objects.filter(
             status_producao=ComandaItem.StatusProducao.ENVIADO,
