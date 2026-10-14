@@ -58,6 +58,22 @@
 .payment-form-grid input { max-width: none }
 .payment-form-help { margin-top: .25rem }
 
+.campos-encerramento {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.campos-encerramento .field {
+    min-width: 0;
+}
+
+@media (max-width: 600px) {
+    .campos-encerramento {
+        grid-template-columns: 1fr;
+    }
+}
+
 @media(max-width:720px) {
     .comanda-heading { align-items: flex-start }
     .comanda-print-actions { width: 100% }

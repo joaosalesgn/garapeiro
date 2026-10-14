@@ -171,9 +171,15 @@
                             Caixa aberto #{{ caixa.pk }}
                         </p>
                         <form method="post" action="{% url 'atendimento:registrar_pagamento' comanda.pk %}">
-                            {% csrf_token %}<div class="payment-form-grid">
-                                {% for field in pagamento_form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}{% if field.name == 'referencia' %}<small class="payment-form-help text-muted">Opcional: comprovante, nota fiscal ou código da transação.</small>{% endif %}</div>{% endfor %}
-                            </div><button class="btn btn-success" type="submit">Registrar pagamento</button>
+                            {% csrf_token %}
+                            <div class="payment-form-grid">
+                                {% for field in pagamento_form %}
+                                <div class="field">
+                                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <button class="btn btn-success" type="submit">Registrar pagamento</button>
                         </form>
                     {% else %}
                         <div class="empty">
@@ -206,9 +212,7 @@
         </section>
         {% if comanda.total > 0 and perms.atendimento.change_comanda %}
             <section class="card">
-                <h2>
-                    Encerrar comanda
-                </h2>
+                <h2> Encerrar comanda </h2>
                 {% if comanda.saldo > 0 %}
                     <p class="subtle">
                         O saldo será lançado no contas a receber. Selecione ou confirme o cliente e informe o vencimento.
@@ -217,21 +221,23 @@
                 <form method="post" action="{% url 'atendimento:fechar_comanda' comanda.pk %}">
                     {% csrf_token %}
                     {% if comanda.saldo > 0 %}
-                        <div class="field">
-                            <label for="id_cliente">Cliente</label>
-                            <select name="cliente" id="id_cliente" {% if not comanda.cliente %}required{% endif %}>
-                                <option value="">
-                                    Selecione um cliente
-                                </option>
-                                {% for cliente in clientes %}
-                                    <option value="{{ cliente.pk }}" {% if comanda.cliente_id == cliente.pk %}selected{% endif %}>
-                                        {{ cliente.nome }}
-                                    </option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="field">
-                            <label for="id_vencimento">Vencimento</label><input type="date" name="vencimento" id="id_vencimento" required>
+                        <div class="campos-encerramento">
+                            <div class="field">
+                                <label for="id_cliente">Cliente</label>
+                                <select name="cliente" id="id_cliente" {% if not comanda.cliente %}required{% endif %}>
+                                    <option value="">Selecione um cliente</option>
+                                    {% for cliente in clientes %}
+                                        <option value="{{ cliente.pk }}" {% if comanda.cliente_id == cliente.pk %}selected{% endif %}>
+                                            {{ cliente.nome }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="field">
+                                <label for="id_vencimento">Vencimento</label>
+                                <input type="date" name="vencimento" id="id_vencimento" required>
+                            </div>
                         </div>
                     {% endif %}
                     <button type="submit" onclick="return confirm('Confirmar encerramento da comanda?')">Encerrar comanda

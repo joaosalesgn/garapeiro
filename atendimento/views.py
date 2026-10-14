@@ -228,7 +228,7 @@ def adicionar_item(request, pk):
             comanda=comanda, produto=produto, produto_nome=produto.nome,
             quantidade=dados["quantidade"], preco_unitario=produto.preco,
             observacao=dados["observacao"], status_producao=(
-                ComandaItem.StatusProducao.PENDENTE if produto.vai_para_cozinha
+                ComandaItem.StatusProducao.ENVIADO if produto.vai_para_cozinha
                 else ComandaItem.StatusProducao.PRONTO
             ), criado_por=request.user, atualizado_por=request.user,
         )
