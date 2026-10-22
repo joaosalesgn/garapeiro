@@ -174,19 +174,31 @@ def comandas(request):
 @login_required
 @permission_required("atendimento.add_comanda", raise_exception=True)
 def nova_comanda(request):
-    form = NovaComandaForm(
-        request.POST or None,
-        initial={"mesa": request.GET.get("mesa")} if request.method == "GET" else None,
-    )
+    if not Caixa.objects.filter(status=Caixa.Status.ABERTO).exists():
+        messages.error(request, "Abra o caixa antes de criar uma comanda.")
+        return redirect("atendimento:inicio")
+
+    form = NovaComandaForm(request.POST or None, initial={"mesa": request.GET.get("mesa")} if request.method == "GET" else None)
+
     if request.method == "POST" and form.is_valid():
-        dados = form.cleaned_data
-        comanda = Comanda.objects.create(
-            canal=dados["canal"], mesa=dados["mesa"], cliente=dados["cliente"],
-            observacao=dados["observacao"], criado_por=request.user, atualizado_por=request.user,
-        )
+        with transaction.atomic():
+            caixa = Caixa.objects.select_for_update().filter(status=Caixa.Status.ABERTO).first()
+
+            if not caixa:
+                messages.error(request, "O caixa foi fechado. Abra-o antes de criar uma comanda.")
+                return redirect("atendimento:inicio")
+
+            dados = form.cleaned_data
+            comanda = Comanda.objects.create(canal=dados["canal"], mesa=dados["mesa"], cliente=dados["cliente"], observacao=dados["observacao"], criado_por=request.user, atualizado_por=request.user)
+
         messages.success(request, f"Comanda #{comanda.pk} aberta.")
         return redirect("atendimento:comanda", pk=comanda.pk)
-    return render(request, "formulario.html", {"form": form, "titulo": "Abrir comanda", "voltar": "atendimento:comandas"})
+
+    return render(request, "formulario.html", {
+        "form": form,
+        "titulo": "Abrir comanda",
+        "voltar": "atendimento:comandas",
+    })
 
 
 @login_required
