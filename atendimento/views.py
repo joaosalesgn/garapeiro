@@ -1,5 +1,6 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 import os
+import uuid
 
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
@@ -17,12 +18,12 @@ from django.views.decorators.http import require_POST
 from .forms import (
     AbrirCaixaForm, AdicionarItemForm, FecharCaixaForm, MovimentacaoForm,
     NovaComandaForm, PagamentoForm, EncerrarComandaForm, NovaContaPagarForm, BaixaContaPagarForm,
-    TesteImpressaoForm,
+    ContaFinanceiraForm, OperacaoFinanceiraForm, TransferenciaForm,
 )
-from .impressao import ErroImpressao, imprimir_itens_cozinha, imprimir_itens_consumo, imprimir_teste_produto
+from .impressao import ErroImpressao, imprimir_itens_cozinha, imprimir_itens_consumo
 from .models import (
     Caixa, Cliente, Comanda, ComandaItem, ItemAdicional, MovimentacaoCaixa, Pagamento,
-    ContaReceber, ContaPagar, BaixaContaPagar, Mesa,
+    ContaReceber, ContaPagar, BaixaContaPagar, Mesa, ContaFinanceira, OperacaoFinanceira, LancamentoTesouraria,
 )
 
 
@@ -41,13 +42,70 @@ def _caixa_aberto():
     return Caixa.objects.filter(status=Caixa.Status.ABERTO).first()
 
 
+def _conta_por_tipo(tipo):
+    return ContaFinanceira.objects.filter(tipo=tipo, ativa=True).order_by("pk").first()
+
+
+def _operacao_recebimento(forma):
+    return OperacaoFinanceira.objects.filter(tipo=OperacaoFinanceira.Tipo.RECEBIMENTO, forma_pagamento=forma, ativa=True).select_related("conta_padrao").first()
+
+
+def _destino_recebimento(forma):
+    operacao = _operacao_recebimento(forma)
+    if forma == Pagamento.Forma.DINHEIRO:
+        conta = _conta_por_tipo(ContaFinanceira.Tipo.GAVETA)
+        if not operacao and conta:
+            operacao = OperacaoFinanceira.objects.filter(tipo=OperacaoFinanceira.Tipo.RECEBIMENTO, forma_pagamento=forma, ativa=True).first()
+    else:
+        conta = operacao.conta_padrao if operacao else None
+    return conta, operacao
+
+
+def _gravar_recebimento(*, caixa, pagamento, forma, valor, usuario):
+    """Grava bruto, taxa e líquido em caixa financeira, garantindo o link do pagamento."""
+    conta, operacao = _destino_recebimento(forma)
+    taxa_pct = operacao.taxa_percentual if operacao and forma != Pagamento.Forma.DINHEIRO else Decimal("0.000")
+    taxa = (valor * taxa_pct / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if not conta:
+        raise ValueError("Configure uma conta financeira e uma operação para esta forma de recebimento antes de usá-la.")
+    liquido = valor - taxa
+    LancamentoTesouraria.objects.create(
+        conta=conta, caixa=caixa, tipo=LancamentoTesouraria.Tipo.RECEBIMENTO,
+        descricao=f"Recebimento {pagamento.get_forma_display()} — Comanda #{pagamento.comanda_id}",
+        valor_bruto=valor, taxa=taxa, valor=liquido, operacao=operacao,
+        pagamento=pagamento, referencia=pagamento.referencia,
+        criado_por=usuario, atualizado_por=usuario,
+    )
+
+
+def _saldo_conta(conta):
+    entradas = conta.lancamentos.filter(cancelado_em__isnull=True).exclude(tipo__in=[LancamentoTesouraria.Tipo.PAGAMENTO, LancamentoTesouraria.Tipo.TRANSFERENCIA_SAIDA, LancamentoTesouraria.Tipo.AJUSTE_SAIDA, LancamentoTesouraria.Tipo.SALDO_INICIAL]).aggregate(v=Sum("valor"))["v"] or Decimal("0.00")
+    saidas = conta.lancamentos.filter(cancelado_em__isnull=True, tipo__in=[LancamentoTesouraria.Tipo.PAGAMENTO, LancamentoTesouraria.Tipo.TRANSFERENCIA_SAIDA, LancamentoTesouraria.Tipo.AJUSTE_SAIDA]).aggregate(v=Sum("valor"))["v"] or Decimal("0.00")
+    return conta.saldo_inicial + entradas - saidas
+
+
+def _registrar_pagamento_cp(*, conta, caixa, baixa, forma, valor, usuario, referencia):
+    LancamentoTesouraria.objects.create(
+        conta=conta, caixa=caixa, tipo=LancamentoTesouraria.Tipo.PAGAMENTO,
+        descricao=f"Pagamento CP #{baixa.conta_id} — {baixa.conta.descricao}",
+        valor_bruto=valor, taxa=Decimal("0.00"), valor=valor, baixa_cp=baixa,
+        referencia=referencia, criado_por=usuario, atualizado_por=usuario,
+    )
+
+
 def _total_caixa(caixa):
-    entradas_pagamentos = caixa.pagamentos.aggregate(total=Sum("valor"))["total"] or Decimal("0.00")
+    entradas_pagamentos = caixa.pagamentos.filter(forma=Pagamento.Forma.DINHEIRO).aggregate(total=Sum("valor"))["total"] or Decimal("0.00")
     movimentos = list(caixa.movimentacoes.values("tipo").annotate(total=Sum("valor")))
     entradas_avulsas = sum((m["total"] for m in movimentos if m["tipo"] == MovimentacaoCaixa.Tipo.ENTRADA), Decimal("0.00"))
     saidas = sum((m["total"] for m in movimentos if m["tipo"] == MovimentacaoCaixa.Tipo.SAIDA), Decimal("0.00"))
+    # CP é paga da conta financeira selecionada, não da gaveta.
     saidas_contas_pagar = caixa.baixas_contas_pagar.aggregate(total=Sum("valor"))["total"] or Decimal("0.00")
-    saidas += saidas_contas_pagar
+    sangrias = caixa.lancamentos_tesouraria.filter(
+        conta__tipo=ContaFinanceira.Tipo.GAVETA,
+        tipo=LancamentoTesouraria.Tipo.TRANSFERENCIA_SAIDA,
+        cancelado_em__isnull=True,
+    ).aggregate(total=Sum("valor"))["total"] or Decimal("0.00")
+    saidas += sangrias
     esperado = caixa.valor_inicial + entradas_pagamentos + entradas_avulsas - saidas
     return {
         "pagamentos": entradas_pagamentos,
@@ -111,22 +169,6 @@ def comandas(request):
     abertas = Comanda.objects.filter(status=Comanda.Status.ABERTA).select_related("mesa", "cliente")
     encerradas = Comanda.objects.exclude(status=Comanda.Status.ABERTA).select_related("mesa", "cliente")[:30]
     return render(request, "comandas.html", {"abertas": abertas, "encerradas": encerradas})
-
-
-@login_required
-@permission_required("atendimento.view_produto", raise_exception=True)
-def teste_impressao_produto(request):
-    nome_impressora = os.environ.get("GARAPEIRO_IMPRESSORA", "POS-80").strip() or "POS-80"
-    form = TesteImpressaoForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        try:
-            imprimir_teste_produto(form.cleaned_data["produto"], form.cleaned_data["quantidade"], nome_impressora)
-        except ErroImpressao as exc:
-            messages.error(request, str(exc))
-        else:
-            messages.success(request, f"Comprovante de teste enviado para {nome_impressora}.")
-            form = TesteImpressaoForm()
-    return render(request, "teste_impressao.html", {"form": form, "nome_impressora": nome_impressora})
 
 
 @login_required
@@ -295,13 +337,19 @@ def registrar_pagamento(request, pk):
         elif form.cleaned_data["valor"] > comanda.saldo:
             messages.error(request, f"O valor supera o saldo de R$ {comanda.saldo:.2f}.")
         else:
-            Pagamento.objects.create(
-                comanda=comanda, caixa=caixa, forma=form.cleaned_data["forma"],
+            forma = form.cleaned_data["forma"]
+            destino_financeiro, operacao = _destino_recebimento(forma)
+            if not destino_financeiro:
+                messages.error(request, "Configure o destino financeiro desta forma de recebimento na Tesouraria.")
+                return redirect("atendimento:comanda", pk=pk)
+            pagamento = Pagamento.objects.create(
+                comanda=comanda, caixa=caixa, forma=forma,
                 valor=form.cleaned_data["valor"], referencia=form.cleaned_data["referencia"],
                 criado_por=request.user, atualizado_por=request.user,
             )
+            _gravar_recebimento(caixa=caixa, pagamento=pagamento, forma=forma, valor=pagamento.valor, usuario=request.user)
             if conta:
-                conta.atualizar_status()
+                conta.atualizar_status(request.user)
             if comanda.saldo == 0:
                 if comanda.status == Comanda.Status.ABERTA:
                     comanda.status = Comanda.Status.FECHADA
@@ -314,7 +362,7 @@ def registrar_pagamento(request, pk):
                                   "vencimento": timezone.localdate(), "criado_por": request.user,
                                   "atualizado_por": request.user},
                     )
-                    conta.atualizar_status()
+                    conta.atualizar_status(request.user)
                     messages.success(request, "Recebimento quitado. Comanda encerrada e CR gerado como quitado.")
                     return redirect("atendimento:inicio")
                 messages.success(request, "Recebimento registrado; conta a receber quitada.")
@@ -347,6 +395,13 @@ def fechar_comanda(request, pk):
             elif comanda.saldo > 0 and not form.cleaned_data.get("vencimento"):
                 messages.error(request, "Informe o vencimento da conta a receber.")
             else:
+                comanda.itens.exclude(
+                    status_producao=ComandaItem.StatusProducao.CANCELADO
+                ).exclude(
+                    status_producao=ComandaItem.StatusProducao.PRONTO
+                ).update(
+                    status_producao=ComandaItem.StatusProducao.PRONTO
+                )
                 comanda.cliente = cliente
                 comanda.status = Comanda.Status.FECHADA
                 comanda.fechada_em = timezone.now()
@@ -362,7 +417,7 @@ def fechar_comanda(request, pk):
                 conta.valor_total = comanda.total
                 conta.atualizado_por = request.user
                 conta.save(update_fields=["cliente", "valor_total", "atualizado_por", "atualizado_em"])
-                conta.atualizar_status()
+                conta.atualizar_status(request.user)
                 if conta.status == ContaReceber.Status.QUITADA:
                     messages.success(request, "Comanda encerrada e CR gerado como quitado.")
                 else:
@@ -397,12 +452,18 @@ def receber_conta(request, pk):
         elif form.cleaned_data["valor"] > conta.saldo:
             messages.error(request, f"O valor supera o saldo de R$ {conta.saldo:.2f}.")
         else:
-            Pagamento.objects.create(
-                comanda=conta.comanda, caixa=caixa, forma=form.cleaned_data["forma"],
+            forma = form.cleaned_data["forma"]
+            destino_financeiro, operacao = _destino_recebimento(forma)
+            if not destino_financeiro:
+                messages.error(request, "Configure o destino financeiro desta forma de recebimento na Tesouraria.")
+                return redirect("atendimento:contas_receber")
+            pagamento = Pagamento.objects.create(
+                comanda=conta.comanda, caixa=caixa, forma=forma,
                 valor=form.cleaned_data["valor"], referencia=form.cleaned_data["referencia"],
                 criado_por=request.user, atualizado_por=request.user,
             )
-            conta.atualizar_status()
+            _gravar_recebimento(caixa=caixa, pagamento=pagamento, forma=forma, valor=pagamento.valor, usuario=request.user)
+            conta.atualizar_status(request.user)
             messages.success(request, f"Recebimento registrado no CR #{conta.pk}.")
     return redirect("atendimento:contas_receber")
 
@@ -425,6 +486,7 @@ def contas_pagar(request):
         "pode_adicionar": request.user.has_perm("atendimento.add_contapagar"),
         "pode_baixar": request.user.has_perm("atendimento.add_baixacontapagar"),
         "caixa_aberto": _caixa_aberto(),
+        "contas_saida": ContaFinanceira.objects.filter(ativa=True, tipo__in=[ContaFinanceira.Tipo.BANCO, ContaFinanceira.Tipo.DINHEIRO]),
     })
 
 
@@ -444,13 +506,16 @@ def baixar_conta_pagar(request, pk):
             messages.error(request, "Abra o caixa para registrar um pagamento de conta.")
         elif form.cleaned_data["valor"] > conta.saldo:
             messages.error(request, f"O valor supera o saldo de R$ {conta.saldo:.2f}.")
+        elif form.cleaned_data["valor"] > _saldo_conta(form.cleaned_data["conta_saida"]):
+            messages.error(request, "O valor supera o saldo disponível na conta de saída escolhida.")
         else:
-            BaixaContaPagar.objects.create(
+            baixa = BaixaContaPagar.objects.create(
                 conta=conta, caixa=caixa, forma=form.cleaned_data["forma"],
                 valor=form.cleaned_data["valor"], referencia=form.cleaned_data["referencia"],
                 criado_por=request.user, atualizado_por=request.user,
             )
-            conta.atualizar_status()
+            _registrar_pagamento_cp(conta=form.cleaned_data["conta_saida"], caixa=caixa, baixa=baixa, forma=baixa.forma, valor=baixa.valor, usuario=request.user, referencia=baixa.referencia)
+            conta.atualizar_status(request.user)
             messages.success(request, f"Pagamento registrado na CP #{conta.pk}.")
     return redirect("atendimento:contas_pagar")
 
@@ -493,6 +558,82 @@ def atualizar_cozinha(request, item_id, status):
 
 
 @login_required
+@permission_required("atendimento.view_contafinanceira", raise_exception=True)
+def tesouraria(request):
+    contas_form = ContaFinanceiraForm(prefix="conta")
+    operacao_form = OperacaoFinanceiraForm(prefix="operacao")
+    transferencia_form = TransferenciaForm(prefix="transferencia")
+    if request.method == "POST":
+        acao = request.POST.get("acao")
+        if acao == "conta" and request.user.has_perm("atendimento.add_contafinanceira"):
+            contas_form = ContaFinanceiraForm(request.POST, prefix="conta")
+            if contas_form.is_valid():
+                conta = contas_form.save(commit=False)
+                conta.criado_por = conta.atualizado_por = request.user
+                conta.save()
+                if conta.saldo_inicial > 0:
+                    LancamentoTesouraria.objects.create(conta=conta, tipo=LancamentoTesouraria.Tipo.SALDO_INICIAL, descricao="Saldo inicial", valor_bruto=conta.saldo_inicial, valor=conta.saldo_inicial, criado_por=request.user, atualizado_por=request.user)
+                messages.success(request, f"Conta financeira {conta.nome} cadastrada.")
+                return redirect("atendimento:tesouraria")
+        elif acao == "operacao" and request.user.has_perm("atendimento.add_operacaofinanceira"):
+            operacao_form = OperacaoFinanceiraForm(request.POST, prefix="operacao")
+            if operacao_form.is_valid():
+                op = operacao_form.save(commit=False)
+                existente = OperacaoFinanceira.objects.filter(tipo=op.tipo, nome=op.nome).first()
+                if existente:
+                    op.pk = existente.pk
+                    op.criado_em = existente.criado_em
+                    op.criado_por = existente.criado_por
+                else:
+                    op.criado_por = request.user
+                op.atualizado_por = request.user
+                op.save()
+                messages.success(request, "Operação financeira cadastrada/atualizada.")
+                return redirect("atendimento:tesouraria")
+        elif acao == "transferencia" and request.user.has_perm("atendimento.add_lancamentotesouraria"):
+            transferencia_form = TransferenciaForm(request.POST, prefix="transferencia")
+            if transferencia_form.is_valid():
+                dados = transferencia_form.cleaned_data
+                caixa_atual = _caixa_aberto()
+                transferencia_invalida = (
+                    dados["origem"].tipo == ContaFinanceira.Tipo.GAVETA
+                    and dados["destino"].tipo == ContaFinanceira.Tipo.DINHEIRO
+                    and dados["descricao"].strip().casefold() != "sangria"
+                ) or (
+                    dados["descricao"].strip().casefold() == "sangria"
+                    and (dados["origem"].tipo != ContaFinanceira.Tipo.GAVETA
+                         or dados["destino"].tipo != ContaFinanceira.Tipo.DINHEIRO)
+                )
+                if not caixa_atual:
+                    messages.error(request, "Abra o caixa antes de registrar uma transferência.")
+                elif transferencia_invalida:
+                    messages.error(request, "A transferência da Gaveta para Dinheiro físico guardado deve ser registrada como sangria.")
+                elif dados["valor"] > _saldo_conta(dados["origem"]):
+                    messages.error(request, "O valor da transferência supera o saldo disponível na conta de origem.")
+                else:
+                    tid = uuid.uuid4()
+                    comum = {"caixa": caixa_atual, "valor_bruto": dados["valor"], "valor": dados["valor"], "transferencia": tid, "criado_por": request.user, "atualizado_por": request.user}
+                    LancamentoTesouraria.objects.create(conta=dados["origem"], tipo=LancamentoTesouraria.Tipo.TRANSFERENCIA_SAIDA, descricao=dados["descricao"], **comum)
+                    LancamentoTesouraria.objects.create(conta=dados["destino"], tipo=LancamentoTesouraria.Tipo.TRANSFERENCIA_ENTRADA, descricao=dados["descricao"], **comum)
+                    messages.success(request, "Transferência registrada nas duas contas.")
+                    return redirect("atendimento:tesouraria")
+        else:
+            raise PermissionDenied
+    contas = ContaFinanceira.objects.filter(ativa=True)
+    saldos = [(conta, _saldo_conta(conta)) for conta in contas]
+    return render(request, "tesouraria.html", {
+        "contas": saldos,
+        "operacoes": OperacaoFinanceira.objects.select_related("conta_padrao").filter(ativa=True),
+        "lancamentos": LancamentoTesouraria.objects.filter(cancelado_em__isnull=True).select_related("conta", "operacao", "caixa")[:100],
+        "contas_form": contas_form, "operacao_form": operacao_form,
+        "transferencia_form": transferencia_form, "caixa_aberto": _caixa_aberto(),
+        "pode_cadastrar_conta": request.user.has_perm("atendimento.add_contafinanceira"),
+        "pode_cadastrar_operacao": request.user.has_perm("atendimento.add_operacaofinanceira"),
+        "pode_transferir": request.user.has_perm("atendimento.add_lancamentotesouraria"),
+    })
+
+
+@login_required
 @permission_required("atendimento.view_caixa", raise_exception=True)
 def caixa(request):
     aberto = _caixa_aberto()
@@ -514,16 +655,34 @@ def abrir_caixa(request):
         for erro in form.errors.values():
             messages.error(request, " ".join(erro))
         return redirect("atendimento:caixa")
+
     try:
         with transaction.atomic():
-            Caixa.objects.create(
-                valor_inicial=form.cleaned_data["valor_inicial"],
-                observacao=form.cleaned_data["observacao"],
-                criado_por=request.user, atualizado_por=request.user,
-            )
+            gaveta = ContaFinanceira.objects.select_for_update().filter(tipo=ContaFinanceira.Tipo.GAVETA, ativa=True).order_by("pk").first()
+
+            if not gaveta:
+                raise ValueError("Cadastre a conta Gaveta na Tesouraria antes de abrir o caixa.")
+
+            caixa = Caixa.objects.create(valor_inicial=form.cleaned_data["valor_inicial"], observacao=form.cleaned_data["observacao"], criado_por=request.user, atualizado_por=request.user)
+            valor_inicial = caixa.valor_inicial
+            if valor_inicial > 0:
+                LancamentoTesouraria.objects.create(
+                    conta=gaveta,
+                    caixa=caixa,
+                    tipo=LancamentoTesouraria.Tipo.AJUSTE_ENTRADA,
+                    descricao="Fundo inicial do caixa",
+                    valor_bruto=valor_inicial,
+                    valor=valor_inicial,
+                    criado_por=request.user,
+                    atualizado_por=request.user,
+                )
+
         messages.success(request, "Caixa aberto.")
     except IntegrityError:
         messages.error(request, "Já existe um caixa aberto.")
+    except ValueError as exc:
+        messages.error(request, str(exc))
+
     return redirect("atendimento:caixa")
 
 
@@ -543,11 +702,23 @@ def registrar_movimentacao(request):
             messages.error(request, "Não há caixa aberto. Peça ao responsável para abrir o caixa antes de lançar a movimentação.")
         else:
             dados = form.cleaned_data
-            MovimentacaoCaixa.objects.create(
-                caixa=caixa, tipo=dados["tipo"], descricao=dados["descricao"], valor=dados["valor"],
-                criado_por=request.user, atualizado_por=request.user,
-            )
-            messages.success(request, "Movimentação registrada.")
+            gaveta = _conta_por_tipo(ContaFinanceira.Tipo.GAVETA)
+            if not gaveta:
+                messages.error(request, "Cadastre a conta Gaveta na Tesouraria antes de lançar movimentações.")
+            elif dados["tipo"] == MovimentacaoCaixa.Tipo.SAIDA and dados["valor"] > _saldo_conta(gaveta):
+                messages.error(request, "O valor da saída supera o saldo disponível na gaveta.")
+            else:
+                mov = MovimentacaoCaixa.objects.create(
+                    caixa=caixa, tipo=dados["tipo"], descricao=dados["descricao"], valor=dados["valor"],
+                    criado_por=request.user, atualizado_por=request.user,
+                )
+                LancamentoTesouraria.objects.create(
+                    conta=gaveta, caixa=caixa,
+                    tipo=(LancamentoTesouraria.Tipo.AJUSTE_ENTRADA if mov.tipo == MovimentacaoCaixa.Tipo.ENTRADA else LancamentoTesouraria.Tipo.AJUSTE_SAIDA),
+                    descricao=mov.descricao, valor_bruto=mov.valor, valor=mov.valor,
+                    referencia=f"Movimentação de caixa #{mov.pk}", criado_por=request.user, atualizado_por=request.user,
+                )
+                messages.success(request, "Movimentação registrada.")
     return redirect(destino)
 
 

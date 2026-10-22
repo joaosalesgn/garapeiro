@@ -42,6 +42,7 @@
                         <th>Pago</th>
                         <th>Saldo</th>
                         <th>Status</th>
+                        <th>Conta de saída</th>
                         <th>Forma de pagamento</th>
                         <th>Valor da baixa</th>
                         <th>Referência <span class="text-muted fw-normal">(opcional)</span></th>
@@ -63,6 +64,12 @@
                             <td><span class="pill {% if conta.status != 'QUITADA' %}warn{% endif %}">{{ conta.get_status_display }}</span></td>
 
                             {% if conta.saldo > 0 and pode_baixar and caixa_aberto %}
+                                <td>
+                                    <select class="form-select cp-payment-input" id="conta-saida-{{ conta.pk }}" name="conta_saida" form="cp-payment-{{ conta.pk }}" required>
+                                        <option value="" selected>Conta de saída</option>
+                                        {% for conta_financeira in contas_saida %}<option value="{{ conta_financeira.pk }}">{{ conta_financeira.nome }}</option>{% endfor %}
+                                    </select>
+                                </td>
                                 <td>
                                     <select class="form-select cp-payment-input" id="forma-{{ conta.pk }}" name="forma" form="cp-payment-{{ conta.pk }}" required>
                                         <option value="" selected>Selecione</option>
@@ -91,7 +98,7 @@
                                     </form>
                                 </td>
                             {% else %}
-                                <td colspan="4" class="cp-payment-unavailable">
+                                <td colspan="5" class="cp-payment-unavailable">
                                     {% if conta.saldo > 0 and pode_baixar and not caixa_aberto %}
                                         <span class="subtle">Abra o caixa para registrar a baixa.</span>
                                     {% else %}
@@ -102,7 +109,7 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="10">
+                            <td colspan="11">
                                 <div class="empty">Nenhuma conta a pagar cadastrada.</div>
                             </td>
                         </tr>
@@ -119,9 +126,10 @@
                     const id = form.id.replace('cp-payment-', '');
                     const forma = document.getElementById('forma-' + id);
                     const valor = document.getElementById('valor-' + id);
+                    const contaSaida = document.getElementById('conta-saida-' + id);
                     const botao = form.querySelector('button[type="submit"]');
 
-                    if (!forma || !valor || !botao) return;
+                    if (!forma || !valor || !botao || !contaSaida) return;
 
                     function atualizarBotao() {
                         const valorValido = valor.value.trim() !== '' &&
@@ -129,10 +137,11 @@
                             Number.isFinite(Number(valor.value)) &&
                             Number(valor.value) > 0;
 
-                        botao.disabled = !(forma.value !== '' && valorValido);
+                        botao.disabled = !(forma.value !== '' && contaSaida.value !== '' && valorValido);
                     }
 
                     forma.addEventListener('change', atualizarBotao);
+                    contaSaida.addEventListener('change', atualizarBotao);
                     valor.addEventListener('input', atualizarBotao);
                     valor.addEventListener('change', atualizarBotao);
                     atualizarBotao();

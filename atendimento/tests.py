@@ -13,52 +13,53 @@ from .models import (
 class CadastrosEAtendimentoTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="teste", password="senha-segura-123")
-        self.categoria = Categoria.objects.create(nome="Pastéis")
-        self.produto = Produto.objects.create(nome="Pastel de queijo", categoria=self.categoria, preco="12.50")
+        self.categoria = Categoria.objects.create(nome="Pastéis", criado_por=self.user, atualizado_por=self.user)
+        self.produto = Produto.objects.create(nome="Pastel de queijo", categoria=self.categoria, preco="12.50", criado_por=self.user, atualizado_por=self.user)
 
     def test_auditoria_registra_criacao(self):
         self.assertIsNotNone(self.produto.criado_em)
         self.assertIsNotNone(self.produto.atualizado_em)
 
     def test_unicidade_de_produto_por_categoria(self):
-        outra = Categoria.objects.create(nome="Bebidas")
-        Produto.objects.create(nome="Pastel de queijo", categoria=outra, preco="12.50")
+        outra = Categoria.objects.create(nome="Bebidas", criado_por=self.user, atualizado_por=self.user)
+        Produto.objects.create(nome="Pastel de queijo", categoria=outra, preco="12.50", criado_por=self.user, atualizado_por=self.user)
         with self.assertRaises(IntegrityError), transaction.atomic():
-            Produto.objects.create(nome="Pastel de queijo", categoria=self.categoria, preco="13.00")
+            Produto.objects.create(nome="Pastel de queijo", categoria=self.categoria, preco="13.00", criado_por=self.user, atualizado_por=self.user)
 
     def test_mesa_tem_numero_unico(self):
-        Mesa.objects.create(numero=1)
+        Mesa.objects.create(numero=1, criado_por=self.user, atualizado_por=self.user)
         with self.assertRaises(IntegrityError), transaction.atomic():
-            Mesa.objects.create(numero=1)
+            Mesa.objects.create(numero=1, criado_por=self.user, atualizado_por=self.user)
 
     def test_comanda_calcula_total_saldo_e_pagamento(self):
-        caixa = Caixa.objects.create(criado_por=self.user, valor_inicial="100.00")
-        comanda = Comanda.objects.create(criado_por=self.user)
+        caixa = Caixa.objects.create(criado_por=self.user, valor_inicial="100.00", atualizado_por=self.user)
+        comanda = Comanda.objects.create(criado_por=self.user, atualizado_por=self.user)
         item = ComandaItem.objects.create(
             comanda=comanda, produto=self.produto, produto_nome=self.produto.nome,
             quantidade=2, preco_unitario="12.50",
-        )
-        adicional = Adicional.objects.create(nome="Queijo extra", preco="2.00")
-        ItemAdicional.objects.create(item=item, adicional=adicional, adicional_nome=adicional.nome, quantidade=1, preco_unitario="2.00")
+         criado_por=self.user, atualizado_por=self.user)
+        adicional = Adicional.objects.create(nome="Queijo extra", preco="2.00", criado_por=self.user, atualizado_por=self.user)
+        ItemAdicional.objects.create(item=item, adicional=adicional, adicional_nome=adicional.nome, quantidade=1, preco_unitario="2.00", criado_por=self.user, atualizado_por=self.user)
         self.assertEqual(comanda.total, Decimal("27.00"))
-        Pagamento.objects.create(comanda=comanda, caixa=caixa, forma=Pagamento.Forma.PIX, valor="10.00")
+        Pagamento.objects.create(comanda=comanda, caixa=caixa, forma=Pagamento.Forma.PIX, valor="10.00", criado_por=self.user, atualizado_por=self.user)
         self.assertEqual(comanda.total_pago, Decimal("10.00"))
         self.assertEqual(comanda.saldo, Decimal("17.00"))
 
     def test_apenas_um_caixa_pode_ficar_aberto(self):
-        Caixa.objects.create(criado_por=self.user)
+        Caixa.objects.create(criado_por=self.user, atualizado_por=self.user)
         with self.assertRaises(IntegrityError), transaction.atomic():
-            Caixa.objects.create(criado_por=self.user)
+            Caixa.objects.create(criado_por=self.user, atualizado_por=self.user)
 
     def test_cancelar_item_preserva_historico_e_recalcula_total_sem_adicional(self):
-        comanda = Comanda.objects.create(criado_por=self.user)
+        comanda = Comanda.objects.create(criado_por=self.user, atualizado_por=self.user)
         item = ComandaItem.objects.create(
             comanda=comanda, produto=self.produto, produto_nome=self.produto.nome,
             quantidade=1, preco_unitario="12.50",
-        )
-        adicional = Adicional.objects.create(nome="Queijo extra", preco="2.00")
-        ItemAdicional.objects.create(item=item, adicional=adicional, adicional_nome=adicional.nome, quantidade=1, preco_unitario="2.00")
+         criado_por=self.user, atualizado_por=self.user)
+        adicional = Adicional.objects.create(nome="Queijo extra", preco="2.00", criado_por=self.user, atualizado_por=self.user)
+        ItemAdicional.objects.create(item=item, adicional=adicional, adicional_nome=adicional.nome, quantidade=1, preco_unitario="2.00", criado_por=self.user, atualizado_por=self.user)
         item.status_producao = ComandaItem.StatusProducao.CANCELADO
+        item.atualizado_por = self.user
         item.save()
         item.refresh_from_db()
         self.assertTrue(ItemAdicional.objects.filter(item=item).exists())
@@ -70,5 +71,5 @@ class CadastrosEAtendimentoTests(TestCase):
         form = AdicionarItemForm()
         self.assertEqual(
             form.fields["produto"].label_from_instance(self.produto),
-            "Pastéis — Pastel de queijo",
+            "Pastel de queijo ——— Pastéis —— R$ 12,50",
         )

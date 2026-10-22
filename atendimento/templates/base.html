@@ -27,6 +27,9 @@
       {% if perms.atendimento.view_caixa %}
       <a href="{% url 'atendimento:caixa' %}">Caixa</a>
       {% endif %}
+      {% if perms.atendimento.view_contafinanceira %}
+      <a href="{% url 'atendimento:tesouraria' %}">Tesouraria</a>
+      {% endif %}
       {% if perms.atendimento.view_contareceber %}
       <a href="{% url 'atendimento:contas_receber' %}">Contas a receber</a>
       {% endif %}

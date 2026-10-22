@@ -27,27 +27,6 @@ def _quebrar_linha(texto: str, largura: int) -> list[str]:
     return linhas
 
 
-def montar_comprovante_produto(produto, quantidade: int, agora=None) -> str:
-    """Gera comprovante de teste explicitamente não fiscal."""
-    agora = agora or datetime.now()
-    largura = 32
-    linhas = [
-        "O GARAPEIRO CAFE".center(largura),
-        "*** TESTE DE IMPRESSAO ***".center(largura),
-        "NAO E DOCUMENTO FISCAL".center(largura),
-        "-" * largura,
-        *_quebrar_linha(f"Produto: {produto.nome}", largura),
-        *_quebrar_linha(f"Categoria: {produto.categoria.nome}", largura),
-        f"Quantidade: {quantidade}",
-        *_quebrar_linha(f"Preco unit.: {_moeda(produto.preco)}", largura),
-        *_quebrar_linha(f"Total teste: {_moeda(produto.preco * quantidade)}", largura),
-        "-" * largura,
-        agora.strftime("%d/%m/%Y %H:%M:%S").center(largura),
-        "\n\n",
-    ]
-    return "\n".join(linhas)
-
-
 def _localizar(comanda) -> str:
     partes = []
     if comanda.mesa_id:
@@ -184,10 +163,6 @@ def imprimir_texto_windows(texto: str, nome_impressora: str) -> None:
         raise ErroImpressao(
             f"Não foi possível imprimir na fila '{nome_impressora}'. Confira se ela está instalada, ligada e pronta. Detalhe: {exc}"
         ) from exc
-
-
-def imprimir_teste_produto(produto, quantidade: int, nome_impressora: str) -> None:
-    imprimir_texto_windows(montar_comprovante_produto(produto, quantidade), nome_impressora)
 
 
 def imprimir_itens_cozinha(comanda, itens, nome_impressora: str) -> None:

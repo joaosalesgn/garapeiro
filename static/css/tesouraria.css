@@ -1,0 +1,7 @@
+.treasury-account-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; }
+.treasury-account { border:1px solid var(--line); border-radius:12px; padding:18px; background:#fff; }
+.treasury-account h3 { font-size:16px; margin:0 0 8px; }
+.treasury-balance { font-size:25px; font-weight:750; font-variant-numeric:tabular-nums; }
+.treasury-table-wrap { overflow-x:auto; }
+.treasury-table { min-width:850px; }
+.treasury-note { padding:12px 14px; background:#f6f5ef; border-radius:9px; color:var(--muted); }

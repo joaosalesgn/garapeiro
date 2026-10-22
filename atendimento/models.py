@@ -11,14 +11,8 @@ class RegistroBase(models.Model):
     """Campos de auditoria comuns, mantidos em tabelas concretas."""
     criado_em = models.DateTimeField(auto_now_add=True, db_index=True)
     atualizado_em = models.DateTimeField(auto_now=True)
-    criado_por = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
-        related_name="%(app_label)s_%(class)s_criados", null=True, blank=True,
-    )
-    atualizado_por = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
-        related_name="%(app_label)s_%(class)s_atualizados", null=True, blank=True,
-    )
+    criado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="%(app_label)s_%(class)s_criados")
+    atualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="%(app_label)s_%(class)s_atualizados")
 
     class Meta:
         abstract = True
@@ -27,10 +21,7 @@ class RegistroBase(models.Model):
 class RegistroCancelavel(RegistroBase):
     """Auditoria de cancelamento lógico, sem apagar histórico financeiro."""
     cancelado_em = models.DateTimeField(null=True, blank=True)
-    cancelado_por = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
-        related_name="%(app_label)s_%(class)s_cancelados", null=True, blank=True,
-    )
+    cancelado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="%(app_label)s_%(class)s_cancelados", null=True, blank=True)
     motivo_cancelamento = models.TextField(blank=True)
 
     class Meta:
@@ -347,12 +338,11 @@ class ContaReceber(RegistroBase):
     def saldo(self):
         return max(self.valor_total - self.total_recebido, Decimal("0.00"))
 
-    def atualizar_status(self):
+    def atualizar_status(self, usuario):
         recebido = self.total_recebido
-        self.status = self.Status.QUITADA if recebido >= self.valor_total else (
-            self.Status.PARCIAL if recebido > 0 else self.Status.ABERTA
-        )
-        self.save(update_fields=["status", "atualizado_em"])
+        self.status = self.Status.QUITADA if recebido >= self.valor_total else (self.Status.PARCIAL if recebido > 0 else self.Status.ABERTA)
+        self.atualizado_por = usuario
+        self.save(update_fields=["status", "atualizado_por", "atualizado_em"])
 
     def __str__(self):
         return f"CR #{self.pk} — Comanda #{self.comanda_id}"
@@ -406,12 +396,11 @@ class ContaPagar(RegistroBase):
     def saldo(self):
         return max(self.valor_total - self.total_pago, Decimal("0.00"))
 
-    def atualizar_status(self):
+    def atualizar_status(self, usuario):
         pago = self.total_pago
-        self.status = self.Status.QUITADA if pago >= self.valor_total else (
-            self.Status.PARCIAL if pago > 0 else self.Status.ABERTA
-        )
-        self.save(update_fields=["status", "atualizado_em"])
+        self.status = self.Status.QUITADA if pago >= self.valor_total else (self.Status.PARCIAL if pago > 0 else self.Status.ABERTA)
+        self.atualizado_por = usuario
+        self.save(update_fields=["status", "atualizado_por", "atualizado_em"])
 
     def __str__(self):
         return f"CP #{self.pk} — {self.descricao}"
@@ -437,3 +426,89 @@ class BaixaContaPagar(RegistroBase):
         constraints = [models.CheckConstraint(condition=Q(valor__gt=0), name="ck_baixa_cp_valor_positivo")]
         verbose_name = "pagamento de conta a pagar"
         verbose_name_plural = "pagamentos de contas a pagar"
+
+
+class ContaFinanceira(RegistroBase):
+    """Local onde o dinheiro da operação é mantido ou recebido."""
+    class Tipo(models.TextChoices):
+        GAVETA = "GAVETA", "Gaveta"
+        DINHEIRO = "DINHEIRO", "Dinheiro físico guardado"
+        BANCO = "BANCO", "Banco"
+
+    nome = models.CharField(max_length=100, unique=True)
+    tipo = models.CharField(max_length=10, choices=Tipo.choices)
+    ativa = models.BooleanField(default=True)
+    saldo_inicial = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(0)])
+
+    class Meta:
+        db_table = "tab_conta_financeira"
+        ordering = ["tipo", "nome"]
+        verbose_name = "conta financeira"
+        verbose_name_plural = "contas financeiras"
+
+    def __str__(self):
+        return self.nome
+
+
+class OperacaoFinanceira(RegistroBase):
+    """Meio configurável de recebimento ou pagamento; taxas só valem para recebimentos."""
+    class Tipo(models.TextChoices):
+        RECEBIMENTO = "RECEBIMENTO", "Recebimento"
+        PAGAMENTO = "PAGAMENTO", "Pagamento"
+
+    nome = models.CharField(max_length=80)
+    tipo = models.CharField(max_length=12, choices=Tipo.choices)
+    forma_pagamento = models.CharField(max_length=10, choices=Pagamento.Forma.choices, blank=True)
+    conta_padrao = models.ForeignKey(ContaFinanceira, on_delete=models.PROTECT, related_name="operacoes_padrao")
+    taxa_percentual = models.DecimalField(max_digits=6, decimal_places=3, default=Decimal("0.000"), validators=[MinValueValidator(0)])
+    ativa = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "tab_operacao_financeira"
+        ordering = ["tipo", "nome"]
+        constraints = [models.UniqueConstraint(fields=["tipo", "nome"], name="uq_operacao_financeira_tipo_nome"), models.CheckConstraint(condition=Q(taxa_percentual__gte=0, taxa_percentual__lte=100), name="ck_operacao_taxa_0_100")]
+        verbose_name = "operação financeira"
+        verbose_name_plural = "operações financeiras"
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} — {self.nome}"
+
+
+class LancamentoTesouraria(RegistroCancelavel):
+    """Movimentação imutável de entrada/saída de uma conta financeira."""
+    class Tipo(models.TextChoices):
+        SALDO_INICIAL = "SALDO_INICIAL", "Saldo inicial"
+        RECEBIMENTO = "RECEBIMENTO", "Recebimento"
+        PAGAMENTO = "PAGAMENTO", "Pagamento"
+        TRANSFERENCIA_ENTRADA = "TRANSF_ENTRADA", "Transferência recebida"
+        TRANSFERENCIA_SAIDA = "TRANSF_SAIDA", "Transferência enviada"
+        AJUSTE_ENTRADA = "AJUSTE_ENTRADA", "Entrada avulsa"
+        AJUSTE_SAIDA = "AJUSTE_SAIDA", "Saída avulsa"
+
+    conta = models.ForeignKey(ContaFinanceira, on_delete=models.PROTECT, related_name="lancamentos")
+    caixa = models.ForeignKey(Caixa, on_delete=models.PROTECT, related_name="lancamentos_tesouraria", null=True, blank=True)
+    tipo = models.CharField(max_length=16, choices=Tipo.choices)
+    descricao = models.CharField(max_length=180)
+    valor_bruto = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(0)])
+    taxa = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(0)])
+    valor = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    operacao = models.ForeignKey(OperacaoFinanceira, on_delete=models.PROTECT, related_name="lancamentos", null=True, blank=True)
+    pagamento = models.OneToOneField(Pagamento, on_delete=models.PROTECT, related_name="lancamento_tesouraria", null=True, blank=True)
+    baixa_cp = models.OneToOneField(BaixaContaPagar, on_delete=models.PROTECT, related_name="lancamento_tesouraria", null=True, blank=True)
+    transferencia = models.UUIDField(null=True, blank=True, db_index=True)
+    referencia = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        db_table = "tab_lancamento_tesouraria"
+        ordering = ["-criado_em", "-pk"]
+        indexes = [models.Index(fields=["conta", "criado_em"], name="ix_lanc_conta_data")]
+        constraints = [models.CheckConstraint(condition=Q(valor__gt=0), name="ck_lanc_tesouraria_valor_positivo"), models.CheckConstraint(condition=Q(taxa__gte=0), name="ck_lanc_tesouraria_taxa_nao_negativa"), models.CheckConstraint(condition=Q(valor_bruto__gte=0), name="ck_lanc_tesouraria_bruto_nao_neg")]
+        verbose_name = "lançamento de tesouraria"
+        verbose_name_plural = "lançamentos de tesouraria"
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} — {self.conta}: R$ {self.valor}"
+
+    @property
+    def direcao(self):
+        return "SAIDA" if self.tipo in {self.Tipo.PAGAMENTO, self.Tipo.TRANSFERENCIA_SAIDA, self.Tipo.AJUSTE_SAIDA} else "ENTRADA"

@@ -3,6 +3,7 @@ from .models import (
     Adicional, Caixa, Categoria, Cliente, Comanda, ComandaItem,
     ItemAdicional, Mesa, MovimentacaoCaixa, Pagamento, Produto,
     ProdutoAdicional, TipoMovimentacao, ContaReceber, ContaPagar, BaixaContaPagar, Fornecedor,
+    ContaFinanceira, OperacaoFinanceira, LancamentoTesouraria,
 )
 
 
@@ -122,6 +123,28 @@ class MovimentacaoCaixaAdmin(CriadoAtualizadoAdmin):
     list_filter = ("tipo", "criado_em")
     search_fields = ("descricao",)
     list_select_related = ("caixa",)
+
+
+@admin.register(ContaFinanceira)
+class ContaFinanceiraAdmin(CriadoAtualizadoAdmin):
+    list_display = ("nome", "tipo", "saldo_inicial", "ativa")
+    list_filter = ("tipo", "ativa")
+    search_fields = ("nome",)
+
+
+@admin.register(OperacaoFinanceira)
+class OperacaoFinanceiraAdmin(CriadoAtualizadoAdmin):
+    list_display = ("nome", "tipo", "forma_pagamento", "conta_padrao", "taxa_percentual", "ativa")
+    list_filter = ("tipo", "ativa")
+    search_fields = ("nome",)
+
+
+@admin.register(LancamentoTesouraria)
+class LancamentoTesourariaAdmin(CriadoAtualizadoAdmin):
+    list_display = ("criado_em", "conta", "tipo", "descricao", "valor_bruto", "taxa", "valor")
+    list_filter = ("tipo", "conta", "criado_em")
+    search_fields = ("descricao", "referencia")
+    readonly_fields = CriadoAtualizadoAdmin.readonly_fields + ("conta", "caixa", "tipo", "descricao", "valor_bruto", "taxa", "valor", "pagamento", "baixa_cp", "transferencia", "referencia")
 
 
 @admin.register(ContaReceber)

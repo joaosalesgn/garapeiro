@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Tesouraria{% endblock %}
+{% block extra_css %}<link href="{% static 'css/contas.css' %}" rel="stylesheet">{% endblock %}
+{% block content %}
+<h1>Tesouraria</h1>
+<p class="muted">Saldos por conta, taxas de recebimento e transferências entre a gaveta, dinheiro guardado e bancos. As taxas incidem somente sobre recebimentos; pagamentos não recebem taxa.</p>
+<div class="grid">
+  {% for conta, saldo in contas %}<section class="card"><div class="muted">{{ conta.get_tipo_display }}</div><h2>{{ conta.nome }}</h2><div class="metric">R$ {{ saldo|floatformat:2 }}</div></section>{% empty %}<section class="card"><p>Nenhuma conta financeira cadastrada.</p></section>{% endfor %}
+</div>
+<div class="grid">
+{% if pode_cadastrar_conta %}<section class="card"><h2>Nova conta financeira</h2><form method="post">{% csrf_token %}<input type="hidden" name="acao" value="conta">{% for field in contas_form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}<button type="submit">Salvar conta</button></form></section>{% endif %}
+{% if pode_cadastrar_operacao %}<section class="card"><h2>Nova operação / taxa</h2><form method="post">{% csrf_token %}<input type="hidden" name="acao" value="operacao">{% for field in operacao_form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}</div>{% endfor %}<button type="submit">Salvar operação</button></form></section>{% endif %}
+{% if pode_transferir %}<section class="card"><h2>Sangria / transferência</h2>{% if caixa_aberto %}<form method="post">{% csrf_token %}<input type="hidden" name="acao" value="transferencia">{% for field in transferencia_form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}<button type="submit">Registrar transferência</button></form>{% else %}<p>Abra o caixa para registrar transferências.</p>{% endif %}</section>{% endif %}
+</div>
+<section class="card"><h2>Operações configuradas</h2><div class="table-wrap"><table class="table table-striped"><thead><tr><th>Tipo</th><th>Operação</th><th>Forma</th><th>Conta padrão</th><th>Taxa</th></tr></thead><tbody>{% for op in operacoes %}<tr><td>{{ op.get_tipo_display }}</td><td>{{ op.nome }}</td><td>{{ op.get_forma_pagamento_display|default:'—' }}</td><td>{{ op.conta_padrao }}</td><td>{% if op.tipo == 'RECEBIMENTO' %}{{ op.taxa_percentual }}%{% else %}—{% endif %}</td></tr>{% empty %}<tr><td colspan="5">Nenhuma operação configurada.</td></tr>{% endfor %}</tbody></table></div></section>
+<section class="card"><h2>Histórico recente</h2><div class="table-wrap"><table class="table table-striped"><thead><tr><th>Data</th><th>Conta</th><th>Descrição</th><th>Bruto</th><th>Taxa</th><th>Líquido / valor</th></tr></thead><tbody>{% for mov in lancamentos %}<tr><td>{{ mov.criado_em|date:'d/m/Y H:i' }}</td><td>{{ mov.conta.nome }}</td><td>{{ mov.descricao }}</td><td>R$ {{ mov.valor_bruto|floatformat:2 }}</td><td>R$ {{ mov.taxa|floatformat:2 }}</td><td>R$ {{ mov.valor|floatformat:2 }}</td></tr>{% empty %}<tr><td colspan="6">Nenhuma movimentação.</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}

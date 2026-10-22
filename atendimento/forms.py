@@ -3,7 +3,54 @@ from decimal import Decimal
 from django import forms
 from django.core.exceptions import ValidationError
 from django.utils.formats import number_format
-from .models import Adicional, Cliente, Comanda, Fornecedor, Mesa, Pagamento, Produto, BaixaContaPagar
+from .models import Adicional, Cliente, Comanda, Fornecedor, Mesa, Pagamento, Produto, BaixaContaPagar, ContaFinanceira, OperacaoFinanceira
+
+
+class ContaFinanceiraForm(forms.ModelForm):
+    class Meta:
+        model = ContaFinanceira
+        fields = ["nome", "tipo", "saldo_inicial", "ativa"]
+
+
+class OperacaoFinanceiraForm(forms.ModelForm):
+    class Meta:
+        model = OperacaoFinanceira
+        fields = ["nome", "tipo", "forma_pagamento", "conta_padrao", "taxa_percentual", "ativa"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["conta_padrao"].queryset = ContaFinanceira.objects.filter(ativa=True)
+        self.fields["taxa_percentual"].help_text = "Taxa percentual aplicada somente quando o tipo for Recebimento."
+
+    def clean(self):
+        dados = super().clean()
+        if dados.get("tipo") == OperacaoFinanceira.Tipo.PAGAMENTO and dados.get("taxa_percentual"):
+            if dados["taxa_percentual"] != Decimal("0.000"):
+                self.add_error("taxa_percentual", "Taxas não se aplicam às operações de pagamento.")
+        if dados.get("tipo") == OperacaoFinanceira.Tipo.RECEBIMENTO and not dados.get("forma_pagamento"):
+            self.add_error("forma_pagamento", "Informe a forma de pagamento para a operação de recebimento.")
+        if dados.get("tipo") == OperacaoFinanceira.Tipo.RECEBIMENTO and dados.get("forma_pagamento") == Pagamento.Forma.DINHEIRO and dados.get("taxa_percentual") not in (None, Decimal("0.000")):
+            self.add_error("taxa_percentual", "Recebimento em dinheiro não pode ter taxa.")
+        conta = dados.get("conta_padrao")
+        forma = dados.get("forma_pagamento")
+        if dados.get("tipo") == OperacaoFinanceira.Tipo.RECEBIMENTO and conta and forma:
+            tipo_esperado = ContaFinanceira.Tipo.GAVETA if forma == Pagamento.Forma.DINHEIRO else ContaFinanceira.Tipo.BANCO
+            if conta.tipo != tipo_esperado:
+                self.add_error("conta_padrao", "Dinheiro deve apontar para Gaveta; PIX e cartões devem apontar para Banco.")
+        return dados
+
+
+class TransferenciaForm(forms.Form):
+    origem = forms.ModelChoiceField(queryset=ContaFinanceira.objects.filter(ativa=True), label="Conta de origem")
+    destino = forms.ModelChoiceField(queryset=ContaFinanceira.objects.filter(ativa=True), label="Conta de destino")
+    valor = forms.DecimalField(min_value=Decimal("0.01"), max_digits=12, decimal_places=2, label="Valor")
+    descricao = forms.CharField(max_length=180, initial="Sangria", label="Descrição")
+
+    def clean(self):
+        dados = super().clean()
+        if dados.get("origem") and dados.get("destino") and dados["origem"] == dados["destino"]:
+            self.add_error("destino", "A conta de origem e destino devem ser diferentes.")
+        return dados
 
 
 class NovaComandaForm(forms.Form):
@@ -34,15 +81,16 @@ class AdicionarItemForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["adicionais"].widget = forms.CheckboxSelectMultiple()
-        self.fields["produto"].label_from_instance = lambda produto: (
-            f"{produto.nome} ——— {produto.categoria.nome} —— R$ {number_format(produto.preco, decimal_pos=2, use_l10n=True)}"
-        )
+
+        self.fields["produto"].label_from_instance = lambda produto: (f"{produto.nome} ——— {produto.categoria.nome} —— " f"R$ {number_format(produto.preco, decimal_pos=2, use_l10n=True)}")
+
+        campo_adicionais = self.fields["adicionais"]
+        campo_adicionais.widget = forms.CheckboxSelectMultiple()
+        campo_adicionais.label_from_instance = lambda adicional: (f"{adicional.nome} — R$ " f"{number_format(adicional.preco, decimal_pos=2, use_l10n=True)}")
+
         produto_id = self.data.get("produto") or self.initial.get("produto")
         if produto_id:
-            self.fields["adicionais"].queryset = Adicional.objects.filter(
-                ativo=True, produtos_permitidos__produto_id=produto_id
-            ).distinct().order_by("nome")
+            campo_adicionais.queryset = Adicional.objects.filter(ativo=True, produtos_permitidos__produto_id=produto_id).distinct().order_by("nome")
 
     def clean(self):
         dados = super().clean()
@@ -53,18 +101,6 @@ class AdicionarItemForm(forms.Form):
             if any(adicional.pk not in permitidos for adicional in adicionais):
                 raise ValidationError("Um ou mais adicionais não estão habilitados para este produto.")
         return dados
-
-
-class TesteImpressaoForm(forms.Form):
-    produto = forms.ModelChoiceField(
-        queryset=Produto.objects.filter(ativo=True).select_related("categoria"),
-        label="Produto", empty_label="Selecione um produto",
-        widget=forms.Select(attrs={"class": "form-select"}),
-    )
-    quantidade = forms.IntegerField(
-        min_value=1, max_value=999, initial=1, label="Quantidade",
-        widget=forms.NumberInput(attrs={"class": "form-control", "min": "1", "max": "999"}),
-    )
 
 
 class PagamentoForm(forms.Form):
@@ -112,6 +148,7 @@ class NovaContaPagarForm(forms.Form):
 
 
 class BaixaContaPagarForm(forms.Form):
+    conta_saida = forms.ModelChoiceField(queryset=ContaFinanceira.objects.filter(ativa=True, tipo__in=[ContaFinanceira.Tipo.BANCO, ContaFinanceira.Tipo.DINHEIRO]), label="Conta de saída")
     forma = forms.ChoiceField(choices=BaixaContaPagar.Forma.choices, label="Forma de pagamento")
     valor = forms.DecimalField(min_value=Decimal("0.01"), max_digits=10, decimal_places=2, label="Valor pago")
     referencia = forms.CharField(

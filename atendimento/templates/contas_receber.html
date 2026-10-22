@@ -43,13 +43,11 @@ Contas a receber
                     
                     {% if conta.saldo > 0 and pode_receber and caixa_aberto %}
                         <td>
-                            <select class="form-select cr-payment-input" id="forma-{{ conta.pk }}" name="forma" form="cr-payment-{{ conta.pk }}" required>
+                            <select class="form-select cr-payment-input" id="forma-{{ conta.pk }}" name="operacao" form="cr-payment-{{ conta.pk }}" required>
                                 <option value="" selected>Selecione</option>
-                                <option value="DINHEIRO">Dinheiro</option>
-                                <option value="PIX">PIX</option>
-                                <option value="CREDITO">Cartão crédito</option>
-                                <option value="DEBITO">Cartão débito</option>
-                                <option value="OUTRO">Outro</option>
+                                {% for operacao in operacoes_recebimento %}
+                                    <option value="{{ operacao.pk }}">{{ operacao.nome }}{% if operacao.taxa_percentual %} · taxa {{ operacao.taxa_percentual }}%{% endif %}</option>
+                                {% endfor %}
                             </select>
                         </td>
                         <td>

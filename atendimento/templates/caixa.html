@@ -19,7 +19,7 @@
                     R$ {{ resumo.esperado|floatformat:2 }}
                 </div>
                 <div class="subtle">
-                    Valor inicial + recebimentos + entradas − saídas e contas pagas
+                    Valor inicial + recebimentos em dinheiro + entradas − saídas avulsas e sangrias
                 </div>
             </section>
             <section class="card">
@@ -93,7 +93,7 @@
                 <span class="list-row-main">Entradas avulsas</span><strong class="list-row-value">R$ {{ resumo.entradas_avulsas|floatformat:2 }}</strong>
             </div>
             <div class="list-row">
-                <span class="list-row-main">Saídas e contas pagas</span><strong class="list-row-value">R$ {{ resumo.saidas|floatformat:2 }}</strong>
+                <span class="list-row-main">Saídas avulsas e sangrias</span><strong class="list-row-value">R$ {{ resumo.saidas|floatformat:2 }}</strong>
             </div>
             {% for mov in movimentacoes %}
                 <div class="list-row">
