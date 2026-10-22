@@ -22,6 +22,9 @@ class OperacaoAtendimentoTests(TestCase):
         self.client.logout()
         self.assertEqual(self.client.get(reverse("atendimento:inicio")).status_code, 302)
 
+    def abrir_caixa_para_teste(self):
+        return Caixa.objects.create(valor_inicial=Decimal("50.00"), criado_por=self.user, atualizado_por=self.user)
+        
     def test_inicio_exibe_mesas_ativas_com_estado_e_links_corretos(self):
         mesa_livre = Mesa.objects.create(numero=2, criado_por=self.user, atualizado_por=self.user)
         Mesa.objects.create(numero=3, ativa=False, criado_por=self.user, atualizado_por=self.user)
@@ -39,6 +42,7 @@ class OperacaoAtendimentoTests(TestCase):
         self.assertEqual(resposta.context["total_mesas"], 2)
 
     def test_mesa_selecionada_no_painel_preenche_formulario_de_nova_comanda(self):
+        self.abrir_caixa_para_teste()
         resposta = self.client.get(reverse("atendimento:nova_comanda"), {"mesa": self.mesa.pk})
 
         self.assertEqual(resposta.status_code, 200)
@@ -46,12 +50,14 @@ class OperacaoAtendimentoTests(TestCase):
         self.assertContains(resposta, f'<option value="{self.mesa.pk}" selected')
 
     def test_abre_comanda_para_mesa(self):
+        self.abrir_caixa_para_teste()
         resposta = self.client.post(reverse("atendimento:nova_comanda"), {"canal": Comanda.Canal.MESA, "mesa": self.mesa.pk, "cliente": "", "observacao": ""})
         comanda = Comanda.objects.get()
         self.assertRedirects(resposta, reverse("atendimento:comanda", kwargs={"pk": comanda.pk}))
         self.assertEqual(comanda.mesa, self.mesa)
 
     def test_impede_duas_comandas_abertas_na_mesma_mesa(self):
+        self.abrir_caixa_para_teste()
         Comanda.objects.create(mesa=self.mesa, criado_por=self.user, atualizado_por=self.user)
         resposta = self.client.post(reverse("atendimento:nova_comanda"), {"canal": Comanda.Canal.MESA, "mesa": self.mesa.pk, "cliente": "", "observacao": ""})
         self.assertEqual(Comanda.objects.count(), 1)

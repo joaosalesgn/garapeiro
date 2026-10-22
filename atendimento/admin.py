@@ -1,10 +1,18 @@
+from django.contrib import messages
+from django.contrib.auth import get_user_model
+from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.contrib.auth.models import User
+from django.core.exceptions import PermissionDenied, ValidationError
+from .status_services import set_product_active, set_user_active
+
 from django.contrib import admin
 from .models import (
     Adicional, Caixa, Categoria, Cliente, Comanda, ComandaItem,
     ItemAdicional, Mesa, MovimentacaoCaixa, Pagamento, Produto,
     ProdutoAdicional, TipoMovimentacao, ContaReceber, ContaPagar, BaixaContaPagar, Fornecedor,
-    ContaFinanceira, OperacaoFinanceira, LancamentoTesouraria,
+    ContaFinanceira, OperacaoFinanceira, LancamentoTesouraria, StatusAuditEvent
 )
+User = get_user_model()
 
 
 class CriadoAtualizadoAdmin(admin.ModelAdmin):
@@ -31,6 +39,39 @@ class ProdutoAdmin(CriadoAtualizadoAdmin):
     list_display = ("nome", "categoria", "preco", "vai_para_cozinha", "ativo")
     list_filter = ("categoria", "vai_para_cozinha", "ativo")
     search_fields = ("nome", "categoria__nome")
+    actions = ("inativar_produtos", "reativar_produtos")
+
+    def get_readonly_fields(self, request, obj=None):
+        return self.readonly_fields + ("ativo",)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.action(description="Inativar produtos selecionados")
+    def inativar_produtos(self, request, queryset):
+        if not request.user.has_perm("atendimento.change_produto"):
+            raise PermissionDenied
+
+        alterados = 0
+        for product_id in queryset.values_list("pk", flat=True):
+            alterados += bool(
+                set_product_active(product_id=product_id, active=False, actor=request.user)
+            )
+
+        self.message_user(request, f"{alterados} produto(s) inativado(s).", messages.SUCCESS)
+
+    @admin.action(description="Reativar produtos selecionados")
+    def reativar_produtos(self, request, queryset):
+        if not request.user.has_perm("atendimento.change_produto"):
+            raise PermissionDenied
+
+        alterados = 0
+        for product_id in queryset.values_list("pk", flat=True):
+            alterados += bool(
+                set_product_active(product_id=product_id, active=True, actor=request.user)
+            )
+
+        self.message_user(request, f"{alterados} produto(s) reativado(s).", messages.SUCCESS)
 
 
 @admin.register(Adicional)
@@ -180,3 +221,69 @@ class BaixaContaPagarAdmin(CriadoAtualizadoAdmin):
     list_display = ("conta", "caixa", "forma", "valor", "criado_em")
     list_filter = ("forma", "criado_em")
     list_select_related = ("conta", "caixa")
+
+
+class ProtectedUserAdmin(DjangoUserAdmin):
+    actions = ("inativar_usuarios", "reativar_usuarios")
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        if "is_active" not in fields:
+            fields.append("is_active")
+        return tuple(fields)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj)
+
+    @admin.action(description="Inativar usuários selecionados")
+    def inativar_usuarios(self, request, queryset):
+        if not request.user.has_perm("atendimento.manage_user_status"):
+            raise PermissionDenied
+
+        alterados = 0
+        for user_id in queryset.values_list("pk", flat=True):
+            try:
+                alterados += bool(
+                    set_user_active(user_id=user_id, active=False, actor=request.user)
+                )
+            except ValidationError as exc:
+                self.message_user(request, str(exc), messages.ERROR)
+
+        self.message_user(request, f"{alterados} usuário(s) inativado(s).", messages.SUCCESS)
+
+    @admin.action(description="Reativar usuários selecionados")
+    def reativar_usuarios(self, request, queryset):
+        if not request.user.has_perm("atendimento.manage_user_status"):
+            raise PermissionDenied
+
+        alterados = 0
+        for user_id in queryset.values_list("pk", flat=True):
+            alterados += bool(
+                set_user_active(user_id=user_id, active=True, actor=request.user)
+            )
+
+        self.message_user(request, f"{alterados} usuário(s) reativado(s).", messages.SUCCESS)
+
+
+admin.site.unregister(User)
+admin.site.register(User, ProtectedUserAdmin)
+
+
+@admin.register(StatusAuditEvent)
+class StatusAuditEventAdmin(admin.ModelAdmin):
+    list_display = ("occurred_at", "action", "actor", "target_user", "target_product")
+    list_filter = ("action", "occurred_at")
+    search_fields = ("actor__username", "target_user__username", "target_product__nome")
+    readonly_fields = ("action", "actor", "occurred_at", "target_user", "target_product")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

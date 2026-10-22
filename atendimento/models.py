@@ -512,3 +512,40 @@ class LancamentoTesouraria(RegistroCancelavel):
     @property
     def direcao(self):
         return "SAIDA" if self.tipo in {self.Tipo.PAGAMENTO, self.Tipo.TRANSFERENCIA_SAIDA, self.Tipo.AJUSTE_SAIDA} else "ENTRADA"
+
+class StatusAuditEvent(models.Model):
+    class Action(models.TextChoices):
+        ACTIVATED = "ACTIVATED", "Ativado"
+        DEACTIVATED = "DEACTIVATED", "Inativado"
+
+    action = models.CharField(max_length=12, choices=Action.choices)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="status_audit_events")
+    occurred_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    # Exatamente um dos alvos deve estar preenchido.
+    target_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name="status_events")
+    target_product = models.ForeignKey(Produto, on_delete=models.PROTECT, null=True, blank=True, related_name="status_events")
+
+    class Meta:
+        ordering = ["-occurred_at", "-pk"]
+        verbose_name = "evento de status"
+        verbose_name_plural = "eventos de status"
+        permissions = [
+            (
+                "manage_user_status",
+                "Pode inativar e reativar contas de usuário",
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    Q(target_user__isnull=False, target_product__isnull=True)
+                    | Q(target_user__isnull=True, target_product__isnull=False)
+                ),
+                name="ck_status_audit_exactly_one_target",
+            ),
+        ]
+
+    def __str__(self):
+        alvo = self.target_user or self.target_product
+        return f"{self.get_action_display()} — {alvo} — {self.occurred_at}"
