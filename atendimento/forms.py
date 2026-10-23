@@ -9,13 +9,20 @@ from .models import Adicional, Cliente, Comanda, Fornecedor, Mesa, Pagamento, Pr
 class ContaFinanceiraForm(forms.ModelForm):
     class Meta:
         model = ContaFinanceira
-        fields = ["nome", "tipo", "saldo_inicial", "ativa"]
+        fields = ["tipo", "saldo_inicial", "ativa"]
+
+    def clean(self):
+        dados = super().clean()
+        tipo = dados.get("tipo")
+        if tipo in (ContaFinanceira.Tipo.GAVETA, ContaFinanceira.Tipo.DINHEIRO) and ContaFinanceira.objects.filter(tipo=tipo, ativa=True).exists():
+            self.add_error("tipo", "Já existe uma conta ativa deste tipo.")
+        return dados
 
 
 class OperacaoFinanceiraForm(forms.ModelForm):
     class Meta:
         model = OperacaoFinanceira
-        fields = ["nome", "tipo", "forma_pagamento", "conta_padrao", "taxa_percentual", "ativa"]
+        fields = ["tipo", "forma_pagamento", "conta_padrao", "taxa_percentual", "ativa"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -27,8 +34,8 @@ class OperacaoFinanceiraForm(forms.ModelForm):
         if dados.get("tipo") == OperacaoFinanceira.Tipo.PAGAMENTO and dados.get("taxa_percentual"):
             if dados["taxa_percentual"] != Decimal("0.000"):
                 self.add_error("taxa_percentual", "Taxas não se aplicam às operações de pagamento.")
-        if dados.get("tipo") == OperacaoFinanceira.Tipo.RECEBIMENTO and not dados.get("forma_pagamento"):
-            self.add_error("forma_pagamento", "Informe a forma de pagamento para a operação de recebimento.")
+        if dados.get("tipo") and not dados.get("forma_pagamento"):
+            self.add_error("forma_pagamento", "Informe a forma de pagamento desta operação.")
         if dados.get("tipo") == OperacaoFinanceira.Tipo.RECEBIMENTO and dados.get("forma_pagamento") == Pagamento.Forma.DINHEIRO and dados.get("taxa_percentual") not in (None, Decimal("0.000")):
             self.add_error("taxa_percentual", "Recebimento em dinheiro não pode ter taxa.")
         conta = dados.get("conta_padrao")
@@ -104,9 +111,18 @@ class AdicionarItemForm(forms.Form):
 
 
 class PagamentoForm(forms.Form):
-    forma = forms.ChoiceField(choices=Pagamento.Forma.choices, label="Forma de pagamento", widget=forms.Select(attrs={"class": "form-select"}))
+    forma = forms.ChoiceField(choices=(), label="Forma de recebimento", widget=forms.Select(attrs={"class": "form-select"}))
     valor = forms.DecimalField(min_value=Decimal("0.01"), max_digits=10, decimal_places=2, label="Valor", widget=forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "inputmode": "decimal"}))
     referencia = forms.CharField(required=False, max_length=100, label="Referência", widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Documento ou código da transação"}), help_text="Opcional. Use para número do comprovante, nota fiscal ou código PIX; deixe em branco se não houver.")
+
+    def __init__(self, *args, operacoes=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        operacoes = operacoes if operacoes is not None else OperacaoFinanceira.objects.filter(
+            tipo=OperacaoFinanceira.Tipo.RECEBIMENTO, ativa=True, conta_padrao__ativa=True
+        ).select_related("conta_padrao")
+        self.fields["forma"].choices = [("", "Selecione")] + list(dict.fromkeys(
+            (op.forma_pagamento, op.get_forma_pagamento_display()) for op in operacoes
+        ))
 
     def clean_valor(self):
         valor = self.cleaned_data["valor"]
@@ -121,7 +137,8 @@ class AbrirCaixaForm(forms.Form):
 
 
 class FecharCaixaForm(forms.Form):
-    valor_fechamento = forms.DecimalField(min_value=Decimal("0.00"), max_digits=10, decimal_places=2)
+    valor_fechamento = forms.DecimalField(min_value=Decimal("0.00"), max_digits=10, decimal_places=2, label="Valor contado antes da sangria")
+    valor_sangria = forms.DecimalField(min_value=Decimal("0.00"), max_digits=10, decimal_places=2, initial=Decimal("0.00"), label="Valor da sangria")
     observacao = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 2}))
 
 
@@ -148,8 +165,18 @@ class NovaContaPagarForm(forms.Form):
 
 
 class BaixaContaPagarForm(forms.Form):
-    conta_saida = forms.ModelChoiceField(queryset=ContaFinanceira.objects.filter(ativa=True, tipo__in=[ContaFinanceira.Tipo.BANCO, ContaFinanceira.Tipo.DINHEIRO]), label="Conta de saída")
-    forma = forms.ChoiceField(choices=BaixaContaPagar.Forma.choices, label="Forma de pagamento")
+    conta_saida = forms.ModelChoiceField(queryset=ContaFinanceira.objects.filter(ativa=True), label="Conta de saída")
+    forma = forms.ChoiceField(choices=(), label="Forma de pagamento")
+
+    def __init__(self, *args, operacoes=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        operacoes = operacoes if operacoes is not None else OperacaoFinanceira.objects.filter(
+            tipo=OperacaoFinanceira.Tipo.PAGAMENTO, ativa=True, conta_padrao__ativa=True
+        )
+        self.fields["forma"].choices = list(dict.fromkeys(
+            (op.forma_pagamento, op.get_forma_pagamento_display()) for op in operacoes
+        ))
+
     valor = forms.DecimalField(min_value=Decimal("0.01"), max_digits=10, decimal_places=2, label="Valor pago")
     referencia = forms.CharField(
         required=False, max_length=100, label="Referência",

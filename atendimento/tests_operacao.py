@@ -17,6 +17,8 @@ class OperacaoAtendimentoTests(TestCase):
         self.gaveta = ContaFinanceira.objects.create(nome="Gaveta", tipo=ContaFinanceira.Tipo.GAVETA, criado_por=self.user, atualizado_por=self.user)
         self.banco = ContaFinanceira.objects.create(nome="Banco", tipo=ContaFinanceira.Tipo.BANCO, criado_por=self.user, atualizado_por=self.user)
         OperacaoFinanceira.objects.create(nome="PIX", tipo=OperacaoFinanceira.Tipo.RECEBIMENTO, forma_pagamento=Pagamento.Forma.PIX, conta_padrao=self.banco, criado_por=self.user, atualizado_por=self.user)
+        OperacaoFinanceira.objects.create(nome="DINHEIRO", tipo=OperacaoFinanceira.Tipo.RECEBIMENTO, forma_pagamento=Pagamento.Forma.DINHEIRO, conta_padrao=self.gaveta, criado_por=self.user, atualizado_por=self.user)
+        OperacaoFinanceira.objects.create(nome="PAGAMENTO_PIX", tipo=OperacaoFinanceira.Tipo.PAGAMENTO, forma_pagamento=Pagamento.Forma.PIX, conta_padrao=self.banco, criado_por=self.user, atualizado_por=self.user)
 
     def test_inicio_exige_login(self):
         self.client.logout()
@@ -170,6 +172,8 @@ class OperacaoAtendimentoTests(TestCase):
         self.assertFalse(resposta.context["itens"].filter(pk=item.pk).exists())
 
     def test_abertura_movimentacao_e_fechamento_do_caixa(self):
+        self.gaveta.saldo_inicial = Decimal("100.00")
+        self.gaveta.save(update_fields=["saldo_inicial"])
         self.client.post(reverse("atendimento:abrir_caixa"), {"valor_inicial": "100.00", "observacao": ""})
         caixa = Caixa.objects.get(status=Caixa.Status.ABERTO)
         resposta = self.client.post(
@@ -182,13 +186,15 @@ class OperacaoAtendimentoTests(TestCase):
             },
             follow=True,
         )
+
         mensagens = (
             [str(mensagem) for mensagem in resposta.context["messages"]]
             if resposta.context
             else []
         )
+
         self.assertEqual(MovimentacaoCaixa.objects.count(), 1, f"A movimentação não foi criada. Mensagens da tela: {mensagens}")
-        self.client.post(reverse("atendimento:fechar_caixa"), {"valor_fechamento": "85.00", "observacao": ""})
+        self.client.post(reverse("atendimento:fechar_caixa"), {"valor_fechamento": "85.00", "valor_sangria": "0.00", "observacao": ""})
         caixa.refresh_from_db()
         self.assertEqual(caixa.status, Caixa.Status.FECHADO)
         self.assertEqual(caixa.valor_fechamento, Decimal("85.00"))
@@ -244,6 +250,72 @@ class OperacaoAtendimentoTests(TestCase):
 
         from .views import _total_caixa
         self.assertEqual(_total_caixa(caixa)["esperado"], Decimal("100.00"), [str(mensagem) for mensagem in resposta.context["messages"]])
+
+    def test_abertura_sugere_saldo_da_gaveta_sem_lancamento_duplicado(self):
+        self.gaveta.saldo_inicial = Decimal("42.50")
+        self.gaveta.save(update_fields=["saldo_inicial"])
+        resposta = self.client.get(reverse("atendimento:caixa"))
+        self.assertEqual(resposta.context["valor_sugerido"], Decimal("42.50"))
+        self.client.post(reverse("atendimento:abrir_caixa"), {"valor_inicial": "42.50", "observacao": ""})
+        caixa = Caixa.objects.get(status=Caixa.Status.ABERTO)
+        self.assertEqual(caixa.valor_inicial, Decimal("42.50"))
+        from .models import LancamentoTesouraria
+        self.assertFalse(LancamentoTesouraria.objects.filter(caixa=caixa).exists())
+
+    def test_saldo_gaveta_ignora_lancamentos_legados_de_fundo_inicial(self):
+        from .models import LancamentoTesouraria
+        from .views import _saldo_conta
+        self.gaveta.saldo_inicial = Decimal("40.00")
+        self.gaveta.save(update_fields=["saldo_inicial"])
+        caixa = Caixa.objects.create(valor_inicial=Decimal("40.00"), criado_por=self.user, atualizado_por=self.user)
+        LancamentoTesouraria.objects.create(
+            conta=self.gaveta, caixa=caixa, tipo=LancamentoTesouraria.Tipo.AJUSTE_ENTRADA,
+            descricao="Fundo inicial do caixa", valor_bruto=Decimal("40.00"), valor=Decimal("40.00"),
+            criado_por=self.user, atualizado_por=self.user,
+        )
+        self.assertEqual(_saldo_conta(self.gaveta), Decimal("40.00"))
+
+    def test_fechamento_transfere_sangria_e_proximo_saldo_fica_na_gaveta(self):
+        self.gaveta.saldo_inicial = Decimal("100.00")
+        self.gaveta.save(update_fields=["saldo_inicial"])
+        guardado = ContaFinanceira.objects.create(nome="DINHEIRO_GUARDADO", tipo=ContaFinanceira.Tipo.DINHEIRO, criado_por=self.user, atualizado_por=self.user)
+        caixa = Caixa.objects.create(valor_inicial=Decimal("100.00"), criado_por=self.user, atualizado_por=self.user)
+        self.client.post(reverse("atendimento:fechar_caixa"), {"valor_fechamento": "95.00", "valor_sangria": "30.00", "observacao": ""}, follow=True)
+        caixa.refresh_from_db()
+        self.assertEqual(caixa.status, Caixa.Status.FECHADO)
+        self.assertEqual(caixa.valor_fechamento, Decimal("95.00"))
+
+        from .models import LancamentoTesouraria
+        from .views import _saldo_conta, _total_caixa
+        saida = LancamentoTesouraria.objects.get(conta=self.gaveta, tipo=LancamentoTesouraria.Tipo.TRANSFERENCIA_SAIDA)
+        entrada = LancamentoTesouraria.objects.get(conta=guardado, tipo=LancamentoTesouraria.Tipo.TRANSFERENCIA_ENTRADA)
+        self.assertEqual(saida.valor, Decimal("30.00"))
+        self.assertEqual(entrada.valor, Decimal("30.00"))
+        self.assertEqual(saida.transferencia, entrada.transferencia)
+        self.assertEqual(_saldo_conta(self.gaveta), Decimal("65.00"))
+        self.assertEqual(_saldo_conta(guardado), Decimal("30.00"))
+        self.assertEqual(_total_caixa(caixa)["esperado"], Decimal("100.00"))
+
+    def test_baixa_cp_exibe_somente_contas_e_operacoes_cadastradas(self):
+        from .forms import BaixaContaPagarForm
+        inativa = ContaFinanceira.objects.create(nome="INATIVA", tipo=ContaFinanceira.Tipo.BANCO, ativa=False, criado_por=self.user, atualizado_por=self.user)
+        forma = BaixaContaPagarForm()
+        valores_contas = set(forma.fields["conta_saida"].queryset.values_list("pk", flat=True))
+        valores_formas = {valor for valor, _ in forma.fields["forma"].choices}
+        self.assertIn(self.gaveta.pk, valores_contas)
+        self.assertIn(self.banco.pk, valores_contas)
+        self.assertNotIn(inativa.pk, valores_contas)
+        self.assertEqual(valores_formas, {Pagamento.Forma.PIX})
+
+    def test_recebimentos_usam_somente_formas_cadastradas(self):
+        from .forms import PagamentoForm
+        form = PagamentoForm()
+        formas_cadastradas = {
+            valor
+            for valor, _ in form.fields["forma"].choices
+            if valor
+        }
+        self.assertEqual(formas_cadastradas, {Pagamento.Forma.PIX, Pagamento.Forma.DINHEIRO})
 
     def test_telas_da_cozinha_e_caixa_carregam(self):
         self.assertEqual(self.client.get(reverse("atendimento:cozinha")).status_code, 200)

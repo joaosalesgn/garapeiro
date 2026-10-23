@@ -1,10 +1,11 @@
 {% extends 'base.html' %}
 {% load static %}
-{% block title %}
-Contas a receber
-{% endblock %}
+{% block title %}Contas a receber{% endblock %}
+
 {% block extra_css %}
-<link href="{% static 'css/contas.css' %}" rel="stylesheet">{% endblock %}
+    <link href="{% static 'css/contas.css' %}" rel="stylesheet">
+{% endblock %}
+
 {% block content %}
 <h1>
     Contas a receber
@@ -14,7 +15,7 @@ Contas a receber
 </p>
 <section class="card">
     <div class="table-wrap">
-        <table class="table table-striped align-middle">
+        <table class="table table-striped align-middle cp-table">
             <thead>
                 <tr>
                     <th>CR / comanda</th>
@@ -43,10 +44,10 @@ Contas a receber
                     
                     {% if conta.saldo > 0 and pode_receber and caixa_aberto %}
                         <td>
-                            <select class="form-select cr-payment-input" id="forma-{{ conta.pk }}" name="operacao" form="cr-payment-{{ conta.pk }}" required>
+                            <select class="form-select cr-payment-input" id="forma-{{ conta.pk }}" name="forma" form="cr-payment-{{ conta.pk }}" required>
                                 <option value="" selected>Selecione</option>
                                 {% for operacao in operacoes_recebimento %}
-                                    <option value="{{ operacao.pk }}">{{ operacao.nome }}{% if operacao.taxa_percentual %} · taxa {{ operacao.taxa_percentual }}%{% endif %}</option>
+                                    <option value="{{ operacao.forma_pagamento }}">{{ operacao.get_forma_pagamento_display }}{% if operacao.taxa_percentual %} · taxa {{ operacao.taxa_percentual }}%{% endif %}</option>
                                 {% endfor %}
                             </select>
                         </td>
@@ -79,7 +80,7 @@ Contas a receber
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="8">
+                    <td colspan="11">
                         <div class="empty">Nenhuma conta a receber registrada.</div>
                     </td>
                 </tr>
