@@ -242,8 +242,119 @@
 
                 <div class="field">
                     <label for="id_valor_inicial">Valor inicial sugerido (saldo atual da Gaveta)</label>
-                    <input name="valor_inicial" id="id_valor_inicial" type="number" min="0" step="0.01" value="{{ valor_sugerido|unlocalize }}" data-money-mask inputmode="numeric" required>
+                    <input name="valor_inicial" id="id_valor_inicial" type="number"min="0" step="0.01" value="{{ valor_sugerido|unlocalize }}"
+                        data-valor-esperado="{{ valor_sugerido|unlocalize }}" data-money-mask inputmode="numeric" required>
                 </div>
+
+                <details class="mb-3">
+                    <summary class="mb-2">Facilitador de contagem de dinheiro</summary>
+                    <p class="subtle">
+                        Conte o dinheiro que ficou na Gaveta. O total será preenchido no valor inicial e comparado com o saldo esperado.
+                    </p>
+
+                    <div class="row g-2">
+                        <div class="col-6 col-md-4">
+                            <label class="form-label mb-1" for="abertura-contagem-005">Moeda de R$ 0,05</label>
+                            <div class="input-group input-group-sm">
+                                <input class="form-control" id="abertura-contagem-005" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="5">
+                                <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-md-4">
+                            <label class="form-label mb-1" for="abertura-contagem-010">Moeda de R$ 0,10</label>
+                            <div class="input-group input-group-sm">
+                                <input class="form-control" id="abertura-contagem-010" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="10">
+                                <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-md-4">
+                            <label class="form-label mb-1" for="abertura-contagem-025">Moeda de R$ 0,25</label>
+                            <div class="input-group input-group-sm">
+                                <input class="form-control" id="abertura-contagem-025" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="25">
+                                <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-md-4">
+                            <label class="form-label mb-1" for="abertura-contagem-050">Moeda de R$ 0,50</label>
+                            <div class="input-group input-group-sm">
+                                <input class="form-control" id="abertura-contagem-050" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="50">
+                                <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-md-4">
+                            <label class="form-label mb-1" for="abertura-contagem-100">Moeda de R$ 1,00</label>
+                            <div class="input-group input-group-sm">
+                                <input class="form-control" id="abertura-contagem-100" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="100">
+                                <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-md-4">
+                            <label class="form-label mb-1" for="abertura-contagem-200">Cédula de R$ 2,00</label>
+                            <div class="input-group input-group-sm">
+                                <input class="form-control" id="abertura-contagem-200" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="200">
+                                <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-md-4">
+                            <label class="form-label mb-1" for="abertura-contagem-500">Cédula de R$ 5,00</label>
+                            <div class="input-group input-group-sm">
+                                <input class="form-control" id="abertura-contagem-500" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="500">
+                                <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-md-4">
+                            <label class="form-label mb-1" for="abertura-contagem-1000">Cédula de R$ 10,00</label>
+                            <div class="input-group input-group-sm">
+                                <input class="form-control" id="abertura-contagem-1000" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="1000">
+                                <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-md-4">
+                            <label class="form-label mb-1" for="abertura-contagem-2000">Cédula de R$ 20,00</label>
+                            <div class="input-group input-group-sm">
+                                <input class="form-control" id="abertura-contagem-2000" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="2000">
+                                <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-md-4">
+                            <label class="form-label mb-1" for="abertura-contagem-5000">Cédula de R$ 50,00</label>
+                            <div class="input-group input-group-sm">
+                                <input class="form-control" id="abertura-contagem-5000" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="5000">
+                                <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-md-4">
+                            <label class="form-label mb-1" for="abertura-contagem-10000">Cédula de R$ 100,00</label>
+                            <div class="input-group input-group-sm">
+                                <input class="form-control" id="abertura-contagem-10000" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="10000">
+                                <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-md-4">
+                            <label class="form-label mb-1" for="abertura-contagem-20000">Cédula de R$ 200,00</label>
+                            <div class="input-group input-group-sm">
+                                <input class="form-control" id="abertura-contagem-20000" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="20000">
+                                <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-2 text-end">
+                        <strong>Total contado: <span id="contagem-total">R$ 0,00</span></strong>
+                        <div id="contagem-comparacao" class="subtle" aria-live="polite"></div>
+                    </div>
+                </details>
 
                 <div class="field">
                     <label for="id_observacao">Observação</label>
@@ -273,43 +384,79 @@
         {% endfor %}
     </section>
 
-    {% if caixa %}
-        <script>
-            (() => {
-                const campos = document.querySelectorAll("[data-valor-centavos]");
-                const campoValorContado = document.getElementById("id_valor_fechamento");
-                const totalExibido = document.getElementById("contagem-total");
-                const formatoMoeda = new Intl.NumberFormat("pt-BR", {
-                    style: "currency",
-                    currency: "BRL"
-                });
+    <script>
+        (() => {
+            const campos = document.querySelectorAll("[data-valor-centavos]");
+            const campoValor = document.getElementById("id_valor_fechamento")
+                || document.getElementById("id_valor_inicial");
+            const totalExibido = document.getElementById("contagem-total");
 
-                function atualizarContagem() {
-                    let totalCentavos = 0;
+            if (!campos.length || !campoValor || !totalExibido) return;
 
-                    campos.forEach((campo) => {
-                        const quantidade = Math.max(0, Math.floor(Number(campo.value) || 0));
-                        const valorUnitario = Number(campo.dataset.valorCentavos);
-                        const subtotal = quantidade * valorUnitario;
-                        totalCentavos += subtotal;
+            const comparacao = document.getElementById("contagem-comparacao");
+            const formatoMoeda = new Intl.NumberFormat("pt-BR", {
+                style: "currency",
+                currency: "BRL"
+            });
 
-                        const exibicaoSubtotal = campo
-                            .closest(".input-group")
-                            .querySelector("[data-subtotal]");
+            const esperadoCentavos = Math.round(
+                Number(campoValor.dataset.valorEsperado || 0) * 100
+            );
 
-                        exibicaoSubtotal.textContent = formatoMoeda.format(subtotal / 100);
-                    });
+            let contagemIniciada = Array.from(campos).some(
+                campo => campo.value.trim() !== ""
+            );
 
-                    totalExibido.textContent = formatoMoeda.format(totalCentavos / 100);
-                    campoValorContado.value = (totalCentavos / 100).toFixed(2);
-                }
+            function atualizarContagem() {
+                let totalCentavos = 0;
 
                 campos.forEach((campo) => {
-                    campo.addEventListener("input", atualizarContagem);
+                    const quantidade = Math.max(0, Math.floor(Number(campo.value) || 0));
+                    const valorUnitario = Number(campo.dataset.valorCentavos);
+                    const subtotal = quantidade * valorUnitario;
+                    totalCentavos += subtotal;
+
+                    campo.closest(".input-group")
+                        .querySelector("[data-subtotal]")
+                        .textContent = formatoMoeda.format(subtotal / 100);
                 });
 
-                atualizarContagem();
-            })();
-        </script>
-    {% endif %}
+                totalExibido.textContent = formatoMoeda.format(totalCentavos / 100);
+
+                if (contagemIniciada) {
+                    campoValor.value = (totalCentavos / 100).toFixed(2);
+                    campoValor.dispatchEvent(new Event("input", { bubbles: true }));
+                }
+
+                if (comparacao) {
+                    if (!contagemIniciada) {
+                        comparacao.textContent =
+                            `Saldo esperado na Gaveta: ${formatoMoeda.format(esperadoCentavos / 100)}. Informe as quantidades para comparar.`;
+                        return;
+                    }
+
+                    const diferenca = totalCentavos - esperadoCentavos;
+
+                    if (diferenca === 0) {
+                        comparacao.textContent = "Confere com o saldo esperado da Gaveta.";
+                    } else if (diferenca > 0) {
+                        comparacao.textContent =
+                            `Acima do esperado em ${formatoMoeda.format(diferenca / 100)}.`;
+                    } else {
+                        comparacao.textContent =
+                            `Abaixo do esperado em ${formatoMoeda.format(Math.abs(diferenca) / 100)}.`;
+                    }
+                }
+            }
+
+            campos.forEach((campo) => {
+                campo.addEventListener("input", () => {
+                    contagemIniciada = true;
+                    atualizarContagem();
+                });
+            });
+
+            atualizarContagem();
+        })();
+    </script>
 {% endblock %}
