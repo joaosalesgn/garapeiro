@@ -56,7 +56,7 @@
 
                     <div class="field">
                         <label for="id_valor">Valor</label>
-                        <input name="valor" id="id_valor" type="number" min="0.01" step="0.01" required>
+                        <input name="valor" id="id_valor" type="number" min="0.01" step="0.01" data-money-mask inputmode="numeric" required>
                     </div>
 
                     <button type="submit">Registrar movimentação</button>
@@ -76,13 +76,7 @@
 
                     <div class="field">
                         <label for="id_valor_fechamento">Valor contado antes da sangria</label>
-                        <input
-                            name="valor_fechamento"
-                            id="id_valor_fechamento"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            required>
+                        <input name="valor_fechamento" id="id_valor_fechamento" type="number" min="0" step="0.01" data-money-mask inputmode="numeric" required>
                     </div>
 
                     <details class="mb-3">
@@ -196,14 +190,7 @@
 
                     <div class="field">
                         <label for="id_valor_sangria">Valor da sangria para Dinheiro físico guardado</label>
-                        <input
-                            name="valor_sangria"
-                            id="id_valor_sangria"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value="0.00"
-                            required>
+                        <input name="valor_sangria" id="id_valor_sangria" type="number" min="0" step="0.01" value="0.00" data-money-mask inputmode="numeric" required>
                     </div>
 
                     <div class="field">
@@ -255,14 +242,7 @@
 
                 <div class="field">
                     <label for="id_valor_inicial">Valor inicial sugerido (saldo atual da Gaveta)</label>
-                    <input
-                        name="valor_inicial"
-                        id="id_valor_inicial"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value="{{ valor_sugerido|unlocalize }}"
-                        required>
+                    <input name="valor_inicial" id="id_valor_inicial" type="number" min="0" step="0.01" value="{{ valor_sugerido|unlocalize }}" data-money-mask inputmode="numeric" required>
                 </div>
 
                 <div class="field">

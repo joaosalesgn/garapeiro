@@ -53,7 +53,7 @@
                         </td>
                         <td>
                             <input class="form-control cr-payment-input" id="valor-{{ conta.pk }}" type="number"
-                                name="valor" form="cr-payment-{{ conta.pk }}" min="0.01"
+                                name="valor" form="cr-payment-{{ conta.pk }}" min="0.01" data-money-mask inputmode="numeric"
                                 max="{{ conta.saldo }}" step="0.01" placeholder="0,00" required>
                         </td>
                         <td>
@@ -104,8 +104,8 @@
                 function atualizarBotao() {
                     const valorValido = valor.value.trim() !== '' &&
                         valor.checkValidity() &&
-                        Number.isFinite(Number(valor.value)) &&
-                        Number(valor.value) > 0;
+                        Number.isFinite(Number(valor.dataset.moneyCents)) &&
+                        Number(valor.dataset.moneyCents) > 0
 
                     botao.disabled = !(forma.value !== '' && valorValido);
                 }
