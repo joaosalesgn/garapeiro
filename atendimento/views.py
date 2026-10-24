@@ -199,7 +199,17 @@ def nova_comanda(request):
         messages.error(request, "Abra o caixa antes de criar uma comanda.")
         return redirect("atendimento:inicio")
 
-    form = NovaComandaForm(request.POST or None, initial={"mesa": request.GET.get("mesa")} if request.method == "GET" else None)
+    if request.method == "GET":
+        mesa_id = request.GET.get("mesa")
+
+        initial = {"canal": (Comanda.Canal.MESA if mesa_id else Comanda.Canal.BALCAO )}
+
+        if mesa_id:
+            initial["mesa"] = mesa_id
+
+        form = NovaComandaForm(initial=initial)
+    else:
+        form = NovaComandaForm(request.POST)
 
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
@@ -458,7 +468,7 @@ def fechar_comanda(request, pk):
                     messages.success(request, "Comanda encerrada e CR gerado como quitado.")
                 else:
                     messages.success(request, f"Comanda encerrada a prazo. CR #{conta.pk} criado para {cliente}.")
-                return redirect("atendimento:contas_receber")
+                return redirect("atendimento:inicio")
     return redirect("atendimento:comanda", pk=pk)
 
 

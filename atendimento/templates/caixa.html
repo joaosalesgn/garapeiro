@@ -1,4 +1,6 @@
 {% extends 'base.html' %}
+{% load l10n %}
+
 {% block title %}
     Caixa
 {% endblock %}
@@ -119,7 +121,8 @@
             <form method="post" action="{% url 'atendimento:abrir_caixa' %}">
                 {% csrf_token %}
                 <div class="field">
-                    <label for="id_valor_inicial">Valor inicial sugerido (saldo atual da Gaveta)</label><input name="valor_inicial" id="id_valor_inicial" type="number" min="0" step="0.01" value="{{ valor_sugerido|floatformat:2 }}" required>
+                    <label for="id_valor_inicial">Valor inicial sugerido (saldo atual da Gaveta)</label>
+                    <input name="valor_inicial" id="id_valor_inicial" type="number" min="0" step="0.01" value="{{ valor_sugerido|unlocalize }}" required>
                 </div>
                 <div class="field">
                     <label for="id_observacao">Observação</label><textarea name="observacao" id="id_observacao" rows="2"></textarea>
