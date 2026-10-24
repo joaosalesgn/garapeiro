@@ -4,145 +4,332 @@
 {% block title %}
     Caixa
 {% endblock %}
+
 {% block content %}
-    <h1>
-        Caixa
-    </h1>
+    <h1>Caixa</h1>
+
     {% if caixa %}
         <div class="toolbar">
-            <span class="pill">Aberto · Caixa #{{ caixa.pk }}</span><span class="subtle">Desde {{ caixa.aberto_em|date:'d/m/Y H:i' }}</span>
+            <span class="pill">Aberto · Caixa #{{ caixa.pk }}</span>
+            <span class="subtle">Desde {{ caixa.aberto_em|date:'d/m/Y H:i' }}</span>
         </div>
+
         <div class="grid">
             <section class="card">
-                <div class="muted">
-                    Saldo esperado
-                </div>
-                <div class="metric">
-                    R$ {{ resumo.esperado|floatformat:2 }}
-                </div>
+                <div class="muted">Saldo esperado</div>
+                <div class="metric">R$ {{ resumo.esperado|floatformat:2 }}</div>
                 <div class="subtle">
                     Valor inicial + recebimentos em dinheiro + entradas − saídas avulsas e sangrias
                 </div>
             </section>
+
             <section class="card">
-                <div class="muted">
-                    Valor inicial
-                </div>
-                <div class="metric">
-                    R$ {{ caixa.valor_inicial|floatformat:2 }}
-                </div>
+                <div class="muted">Valor inicial</div>
+                <div class="metric">R$ {{ caixa.valor_inicial|floatformat:2 }}</div>
             </section>
+
             <section class="card">
-                <div class="muted">
-                    Recebimentos de comandas
-                </div>
-                <div class="metric">
-                    R$ {{ resumo.pagamentos|floatformat:2 }}
-                </div>
+                <div class="muted">Recebimentos de comandas</div>
+                <div class="metric">R$ {{ resumo.pagamentos|floatformat:2 }}</div>
             </section>
         </div>
+
         <div class="grid">
             <section class="card">
-                <h2>
-                    Movimentação avulsa
-                </h2>
+                <h2>Movimentação avulsa</h2>
+
                 <form method="post" action="{% url 'atendimento:registrar_movimentacao' %}">
                     {% csrf_token %}
+
                     <div class="field">
                         <label for="id_tipo">Tipo</label>
                         <select name="tipo" id="id_tipo">
-                            <option value="ENTRADA">
-                                Entrada avulsa
-                            </option>
-                            <option value="SAIDA">
-                                Saída
-                            </option>
+                            <option value="ENTRADA">Entrada avulsa</option>
+                            <option value="SAIDA">Saída</option>
                         </select>
                     </div>
+
                     <div class="field">
-                        <label for="id_descricao">Descrição</label><input name="descricao" id="id_descricao" maxlength="150" required>
+                        <label for="id_descricao">Descrição</label>
+                        <input name="descricao" id="id_descricao" maxlength="150" required>
                     </div>
+
                     <div class="field">
-                        <label for="id_valor">Valor</label><input name="valor" id="id_valor" type="number" min="0.01" step="0.01" required>
+                        <label for="id_valor">Valor</label>
+                        <input name="valor" id="id_valor" type="number" min="0.01" step="0.01" required>
                     </div>
+
                     <button type="submit">Registrar movimentação</button>
                 </form>
             </section>
+
             <section class="card">
-                <h2>
-                    Fechar caixa
-                </h2>
+                <h2>Fechar caixa</h2>
+
                 <p class="subtle">
-                    Informe o total contado antes da sangria e quanto será retirado. A sangria será transferida para Dinheiro físico guardado; o saldo restante na Gaveta será sugerido na próxima abertura.
+                    Informe o total contado antes da sangria e quanto será retirado. A sangria será transferida
+                    para Dinheiro físico guardado; o saldo restante na Gaveta será sugerido na próxima abertura.
                 </p>
+
                 <form method="post" action="{% url 'atendimento:fechar_caixa' %}">
                     {% csrf_token %}
+
                     <div class="field">
-                        <label for="id_valor_fechamento">Valor contado antes da sangria</label><input name="valor_fechamento" id="id_valor_fechamento" type="number" min="0" step="0.01" required>
+                        <label for="id_valor_fechamento">Valor contado antes da sangria</label>
+                        <input
+                            name="valor_fechamento"
+                            id="id_valor_fechamento"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            required>
                     </div>
+
+                    <details class="mb-3">
+                        <summary class="mb-2">Facilitador de contagem de dinheiro</summary>
+                        <p class="subtle">
+                            Informe a quantidade de moedas e cédulas. O total será enviado ao campo de valor contado.
+                        </p>
+
+                        <div class="row g-2">
+                            <div class="col-6 col-md-4">
+                                <label class="form-label mb-1" for="contagem-005">Moeda de R$ 0,05</label>
+                                <div class="input-group input-group-sm">
+                                    <input class="form-control" id="contagem-005" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="5">
+                                    <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                                </div>
+                            </div>
+
+                            <div class="col-6 col-md-4">
+                                <label class="form-label mb-1" for="contagem-010">Moeda de R$ 0,10</label>
+                                <div class="input-group input-group-sm">
+                                    <input class="form-control" id="contagem-010" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="10">
+                                    <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                                </div>
+                            </div>
+
+                            <div class="col-6 col-md-4">
+                                <label class="form-label mb-1" for="contagem-025">Moeda de R$ 0,25</label>
+                                <div class="input-group input-group-sm">
+                                    <input class="form-control" id="contagem-025" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="25">
+                                    <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                                </div>
+                            </div>
+
+                            <div class="col-6 col-md-4">
+                                <label class="form-label mb-1" for="contagem-050">Moeda de R$ 0,50</label>
+                                <div class="input-group input-group-sm">
+                                    <input class="form-control" id="contagem-050" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="50">
+                                    <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                                </div>
+                            </div>
+
+                            <div class="col-6 col-md-4">
+                                <label class="form-label mb-1" for="contagem-100">Moeda de R$ 1,00</label>
+                                <div class="input-group input-group-sm">
+                                    <input class="form-control" id="contagem-100" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="100">
+                                    <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                                </div>
+                            </div>
+
+                            <div class="col-6 col-md-4">
+                                <label class="form-label mb-1" for="contagem-200">Cédula de R$ 2,00</label>
+                                <div class="input-group input-group-sm">
+                                    <input class="form-control" id="contagem-200" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="200">
+                                    <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                                </div>
+                            </div>
+
+                            <div class="col-6 col-md-4">
+                                <label class="form-label mb-1" for="contagem-500">Cédula de R$ 5,00</label>
+                                <div class="input-group input-group-sm">
+                                    <input class="form-control" id="contagem-500" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="500">
+                                    <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                                </div>
+                            </div>
+
+                            <div class="col-6 col-md-4">
+                                <label class="form-label mb-1" for="contagem-1000">Cédula de R$ 10,00</label>
+                                <div class="input-group input-group-sm">
+                                    <input class="form-control" id="contagem-1000" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="1000">
+                                    <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                                </div>
+                            </div>
+
+                            <div class="col-6 col-md-4">
+                                <label class="form-label mb-1" for="contagem-2000">Cédula de R$ 20,00</label>
+                                <div class="input-group input-group-sm">
+                                    <input class="form-control" id="contagem-2000" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="2000">
+                                    <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                                </div>
+                            </div>
+
+                            <div class="col-6 col-md-4">
+                                <label class="form-label mb-1" for="contagem-5000">Cédula de R$ 50,00</label>
+                                <div class="input-group input-group-sm">
+                                    <input class="form-control" id="contagem-5000" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="5000">
+                                    <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                                </div>
+                            </div>
+
+                            <div class="col-6 col-md-4">
+                                <label class="form-label mb-1" for="contagem-10000">Cédula de R$ 100,00</label>
+                                <div class="input-group input-group-sm">
+                                    <input class="form-control" id="contagem-10000" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="10000">
+                                    <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                                </div>
+                            </div>
+
+                            <div class="col-6 col-md-4">
+                                <label class="form-label mb-1" for="contagem-20000">Cédula de R$ 200,00</label>
+                                <div class="input-group input-group-sm">
+                                    <input class="form-control" id="contagem-20000" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-valor-centavos="20000">
+                                    <span class="input-group-text" data-subtotal>R$ 0,00</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-2 text-end">
+                            <strong>Total contado: <span id="contagem-total">R$ 0,00</span></strong>
+                        </div>
+                    </details>
+
                     <div class="field">
-                        <label for="id_valor_sangria">Valor da sangria para Dinheiro físico guardado</label><input name="valor_sangria" id="id_valor_sangria" type="number" min="0" step="0.01" value="0.00" required>
+                        <label for="id_valor_sangria">Valor da sangria para Dinheiro físico guardado</label>
+                        <input
+                            name="valor_sangria"
+                            id="id_valor_sangria"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value="0.00"
+                            required>
                     </div>
+
                     <div class="field">
-                        <label for="id_observacao_fechamento">Observação</label><textarea name="observacao" id="id_observacao_fechamento" rows="2"></textarea>
+                        <label for="id_observacao_fechamento">Observação</label>
+                        <textarea name="observacao" id="id_observacao_fechamento" rows="2"></textarea>
                     </div>
-                    <button class="danger" type="submit" onclick="return confirm('Confirmar o fechamento do caixa?')">Fechar caixa</button>
+
+                    <button class="danger" type="submit" onclick="return confirm('Confirmar o fechamento do caixa?')">
+                        Fechar caixa
+                    </button>
                 </form>
             </section>
         </div>
+
         <section class="card list-card">
-            <h2>
-                Movimentações recentes
-            </h2>
+            <h2>Movimentações recentes</h2>
+
             <div class="list-row">
-                <span class="list-row-main">Entradas avulsas</span><strong class="list-row-value">R$ {{ resumo.entradas_avulsas|floatformat:2 }}</strong>
+                <span class="list-row-main">Entradas avulsas</span>
+                <strong class="list-row-value">R$ {{ resumo.entradas_avulsas|floatformat:2 }}</strong>
             </div>
+
             <div class="list-row">
-                <span class="list-row-main">Saídas avulsas e sangrias</span><strong class="list-row-value">R$ {{ resumo.saidas|floatformat:2 }}</strong>
+                <span class="list-row-main">Saídas avulsas e sangrias</span>
+                <strong class="list-row-value">R$ {{ resumo.saidas|floatformat:2 }}</strong>
             </div>
+
             {% for mov in movimentacoes %}
                 <div class="list-row">
-                    <span class="list-row-main">{{ mov.get_tipo_display }} · {{ mov.descricao }} · {{ mov.criado_em|date:'d/m H:i' }}</span><strong class="list-row-value">R$ {{ mov.valor|floatformat:2 }}</strong>
+                    <span class="list-row-main">
+                        {{ mov.get_tipo_display }} · {{ mov.descricao }} · {{ mov.criado_em|date:'d/m H:i' }}
+                    </span>
+                    <strong class="list-row-value">R$ {{ mov.valor|floatformat:2 }}</strong>
                 </div>
             {% empty %}
-                <div class="empty">
-                    Nenhuma movimentação avulsa.
-                </div>
+                <div class="empty">Nenhuma movimentação avulsa.</div>
             {% endfor %}
         </section>
     {% else %}
         <section class="card">
-            <h2>
-                Abrir caixa
-            </h2>
+            <h2>Abrir caixa</h2>
+
             <p class="muted">
                 Abra o caixa para receber pagamentos das comandas e registrar entradas ou saídas.
             </p>
+
             <form method="post" action="{% url 'atendimento:abrir_caixa' %}">
                 {% csrf_token %}
+
                 <div class="field">
                     <label for="id_valor_inicial">Valor inicial sugerido (saldo atual da Gaveta)</label>
-                    <input name="valor_inicial" id="id_valor_inicial" type="number" min="0" step="0.01" value="{{ valor_sugerido|unlocalize }}" required>
+                    <input
+                        name="valor_inicial"
+                        id="id_valor_inicial"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value="{{ valor_sugerido|unlocalize }}"
+                        required>
                 </div>
+
                 <div class="field">
-                    <label for="id_observacao">Observação</label><textarea name="observacao" id="id_observacao" rows="2"></textarea>
+                    <label for="id_observacao">Observação</label>
+                    <textarea name="observacao" id="id_observacao" rows="2"></textarea>
                 </div>
+
                 <button type="submit">Abrir caixa</button>
             </form>
         </section>
     {% endif %}
+
     <section class="card list-card">
-        <h2>
-            Caixas encerrados
-        </h2>
+        <h2>Caixas encerrados</h2>
+
         {% for c, resumo_fechado in historico %}
             <div class="list-row">
-                <span class="list-row-main">Caixa #{{ c.pk }} · {{ c.aberto_em|date:'d/m/Y H:i' }} – {{ c.fechado_em|date:'d/m/Y H:i' }}</span><span class="list-row-value">Esperado R$ {{ resumo_fechado.esperado|floatformat:2 }} · Contado R$ {{ c.valor_fechamento|floatformat:2 }}</span>
+                <span class="list-row-main">
+                    Caixa #{{ c.pk }} · {{ c.aberto_em|date:'d/m/Y H:i' }} – {{ c.fechado_em|date:'d/m/Y H:i' }}
+                </span>
+                <span class="list-row-value">
+                    Esperado R$ {{ resumo_fechado.esperado|floatformat:2 }} ·
+                    Contado R$ {{ c.valor_fechamento|floatformat:2 }}
+                </span>
             </div>
         {% empty %}
-            <div class="empty">
-                Nenhum histórico de fechamento disponível.
-            </div>
+            <div class="empty">Nenhum histórico de fechamento disponível.</div>
         {% endfor %}
     </section>
+
+    {% if caixa %}
+        <script>
+            (() => {
+                const campos = document.querySelectorAll("[data-valor-centavos]");
+                const campoValorContado = document.getElementById("id_valor_fechamento");
+                const totalExibido = document.getElementById("contagem-total");
+                const formatoMoeda = new Intl.NumberFormat("pt-BR", {
+                    style: "currency",
+                    currency: "BRL"
+                });
+
+                function atualizarContagem() {
+                    let totalCentavos = 0;
+
+                    campos.forEach((campo) => {
+                        const quantidade = Math.max(0, Math.floor(Number(campo.value) || 0));
+                        const valorUnitario = Number(campo.dataset.valorCentavos);
+                        const subtotal = quantidade * valorUnitario;
+                        totalCentavos += subtotal;
+
+                        const exibicaoSubtotal = campo
+                            .closest(".input-group")
+                            .querySelector("[data-subtotal]");
+
+                        exibicaoSubtotal.textContent = formatoMoeda.format(subtotal / 100);
+                    });
+
+                    totalExibido.textContent = formatoMoeda.format(totalCentavos / 100);
+                    campoValorContado.value = (totalCentavos / 100).toFixed(2);
+                }
+
+                campos.forEach((campo) => {
+                    campo.addEventListener("input", atualizarContagem);
+                });
+
+                atualizarContagem();
+            })();
+        </script>
+    {% endif %}
 {% endblock %}
