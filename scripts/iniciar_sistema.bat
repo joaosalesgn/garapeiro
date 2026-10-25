@@ -12,7 +12,7 @@ powershell -NoProfile -Command "$c=New-Object Net.Sockets.TcpClient; try { $c.Co
 if not errorlevel 1 goto abrir_navegador
 
 REM Inicia o Django em uma janela separada.
-start "Servidor da pastelaria" /D "%CD%" "%CD%\.venv\Scripts\python.exe" manage.py runserver localhost:8000
+start "Servidor da pastelaria" /D "%CD%" "%CD%\.venv\Scripts\python.exe" manage.py runserver 0.0.0.0:8000
 
 REM Aguarda ate 60 segundos para a porta do servidor responder.
 set /a tentativas=0

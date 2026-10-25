@@ -293,7 +293,7 @@ class Pagamento(RegistroBase):
 class MovimentacaoCaixa(RegistroBase):
     class Tipo(models.TextChoices):
         ENTRADA = "ENTRADA", "Entrada avulsa"
-        SAIDA = "SAIDA", "Saída"
+        SAIDA = "SAIDA", "Saída avulsa"
 
     caixa = models.ForeignKey(Caixa, on_delete=models.PROTECT, related_name="movimentacoes")
     tipo = models.CharField(max_length=7, choices=Tipo.choices)
