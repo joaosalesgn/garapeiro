@@ -720,16 +720,31 @@ def abrir_caixa(request):
             messages.error(request, " ".join(erro))
         return redirect("atendimento:caixa")
 
+    valor_inicial = form.cleaned_data["valor_inicial"]
+
     try:
         with transaction.atomic():
-            gaveta = ContaFinanceira.objects.select_for_update().filter(tipo=ContaFinanceira.Tipo.GAVETA, ativa=True).order_by("pk").first()
+            gaveta = (ContaFinanceira.objects.select_for_update().filter(tipo=ContaFinanceira.Tipo.GAVETA, ativa=True).order_by("pk").first())
 
             if not gaveta:
                 raise ValueError("Cadastre a conta Gaveta na Tesouraria antes de abrir o caixa.")
 
-            Caixa.objects.create(valor_inicial=form.cleaned_data["valor_inicial"], observacao=form.cleaned_data["observacao"], criado_por=request.user, atualizado_por=request.user)
+            saldo_atual_gaveta = _saldo_conta(gaveta)
+            diferenca = valor_inicial - saldo_atual_gaveta
 
-        messages.success(request, "Caixa aberto.")
+            caixa = Caixa.objects.create(valor_inicial=valor_inicial, observacao=form.cleaned_data["observacao"], criado_por=request.user, atualizado_por=request.user)
+
+            if diferenca != Decimal("0.00"):
+                valor_ajuste = abs(diferenca)
+                tipo_ajuste = (LancamentoTesouraria.Tipo.AJUSTE_ENTRADA if diferenca > 0 else LancamentoTesouraria.Tipo.AJUSTE_SAIDA)
+
+                LancamentoTesouraria.objects.create(conta=gaveta, caixa=caixa, tipo=tipo_ajuste, descricao=f"Ajuste de saldo na abertura do caixa #{caixa.pk}", valor_bruto=valor_ajuste, taxa=Decimal("0.00"), valor=valor_ajuste, criado_por=request.user, atualizado_por=request.user)
+
+        if diferenca == Decimal("0.00"):
+            messages.success(request, "Caixa aberto.")
+        else:
+            messages.success(request, "Caixa aberto. O saldo da Gaveta foi ajustado conforme o valor inicial informado.")
+
     except IntegrityError:
         messages.error(request, "Já existe um caixa aberto.")
     except ValueError as exc:
