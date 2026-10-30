@@ -18,12 +18,12 @@ from django.views.decorators.http import require_POST
 from .forms import (
     AbrirCaixaForm, AdicionarItemForm, FecharCaixaForm, MovimentacaoForm,
     NovaComandaForm, PagamentoForm, EncerrarComandaForm, NovaContaPagarForm, BaixaContaPagarForm,
-    ContaFinanceiraForm, OperacaoFinanceiraForm, TransferenciaForm,
+    ContaFinanceiraForm, OperacaoFinanceiraForm, TransferenciaForm, CupomForm,
 )
 from .impressao import ErroImpressao, imprimir_itens_cozinha, imprimir_itens_consumo
 from .models import (
     Caixa, Cliente, Comanda, ComandaItem, ItemAdicional, MovimentacaoCaixa, Pagamento,
-    ContaReceber, ContaPagar, BaixaContaPagar, Mesa, ContaFinanceira, OperacaoFinanceira, LancamentoTesouraria,
+    ContaReceber, ContaPagar, BaixaContaPagar, Mesa, ContaFinanceira, OperacaoFinanceira, LancamentoTesouraria, Cupom,
 )
 
 
@@ -137,6 +137,51 @@ def _total_caixa(caixa):
     }
 
 
+
+def _aplicar_desconto_comanda(comanda, dados, usuario):
+    """Valida e atualiza em memória o desconto da comanda."""
+    cupom = dados.get("cupom")
+    percentual = dados.get("desconto_percentual")
+    valor_informado = dados.get("desconto_valor")
+    if cupom:
+        if not cupom.valido_em(timezone.localdate()):
+            return "Este cupom não está ativo ou não é válido hoje."
+        if cupom.tipo_desconto == Cupom.TipoDesconto.PERCENTUAL:
+            if valor_informado is not None or (percentual is not None and percentual != cupom.valor_desconto):
+                return "Use o desconto do cupom ou remova o cupom para informar outro desconto."
+            percentual = cupom.valor_desconto
+            valor = (comanda.subtotal * percentual / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        else:
+            if percentual is not None or (valor_informado is not None and valor_informado != cupom.valor_desconto):
+                return "Use o desconto do cupom ou remova o cupom para informar outro desconto."
+            valor = cupom.valor_desconto
+            percentual = None
+    elif percentual is not None and valor_informado is not None:
+        return "Informe o desconto em percentual ou em reais, não ambos."
+    elif percentual is not None:
+        if percentual > Decimal("100"):
+            return "O percentual de desconto não pode ultrapassar 100%."
+        valor = (comanda.subtotal * percentual / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    elif valor_informado is not None:
+        valor = valor_informado
+        percentual = None
+    else:
+        # Pagamento parcelado posterior sem desconto informado mantém o desconto salvo.
+        return None
+    valor = min(valor, comanda.subtotal).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if comanda.total_pago > comanda.subtotal - valor:
+        return "O desconto deixaria o total menor que os pagamentos já registrados."
+    comanda.cupom = cupom
+    comanda.desconto_percentual = percentual
+    comanda.desconto_valor = valor
+    comanda.atualizado_por = usuario
+    return None
+
+
+def _salvar_desconto_comanda(comanda):
+    comanda.save(update_fields=["cupom", "desconto_percentual", "desconto_valor", "atualizado_por", "atualizado_em"])
+
+
 @login_required
 def inicio(request):
     pode_atendimento = request.user.has_perm("atendimento.view_comanda")
@@ -183,6 +228,32 @@ def inicio(request):
         "caixa_disponivel": _caixa_aberto() is not None if request.user.has_perm("atendimento.add_movimentacaocaixa") else False,
     })
 
+
+
+@login_required
+@permission_required("atendimento.manage_cupons", raise_exception=True)
+def cupons(request, pk=None):
+    cupom = get_object_or_404(Cupom, pk=pk) if pk else None
+    if request.method == "POST":
+        cupom_id = request.POST.get("cupom_id")
+        if cupom_id:
+            cupom = get_object_or_404(Cupom, pk=cupom_id)
+        form = CupomForm(request.POST, instance=cupom)
+        if form.is_valid():
+            registro = form.save(commit=False)
+            if not registro.pk:
+                registro.criado_por = request.user
+            registro.atualizado_por = request.user
+            registro.save()
+            messages.success(request, f"Cupom {registro.codigo} salvo.")
+            return redirect("atendimento:cupons")
+    else:
+        form = CupomForm(instance=cupom)
+    return render(request, "cupons.html", {
+        "form": form, "editando": cupom,
+        "cupons": Cupom.objects.all().order_by("-valido_ate", "codigo"),
+        "hoje": timezone.localdate(),
+    })
 
 @login_required
 @permission_required("atendimento.view_comanda", raise_exception=True)
@@ -239,12 +310,26 @@ def detalhe_comanda(request, pk):
     caixa = _caixa_aberto()
     item_form = AdicionarItemForm(initial={"produto": request.GET.get("produto")} if request.GET.get("produto") else None)
     pagamento_form = PagamentoForm(
-        initial={"valor": max(comanda.saldo, Decimal("0.01"))},
+        initial={
+            "valor": max(comanda.saldo, Decimal("0.01")),
+            "cupom": comanda.cupom_id,
+            "desconto_percentual": comanda.desconto_percentual,
+            "desconto_valor": comanda.desconto_valor if not comanda.desconto_percentual else None,
+        },
         operacoes=_operacoes(OperacaoFinanceira.Tipo.RECEBIMENTO),
     )
     return render(request, "comanda.html", {
         "comanda": comanda, "caixa": caixa, "item_form": item_form,
-        "pagamento_form": pagamento_form, "clientes": Cliente.objects.filter(ativo=True),
+        "pagamento_form": pagamento_form,
+        "encerrar_form": EncerrarComandaForm(initial={
+            "cupom": comanda.cupom_id,
+            "desconto_percentual": comanda.desconto_percentual,
+            "desconto_valor": comanda.desconto_valor if not comanda.desconto_percentual else None,
+        }),
+        "cupons_js": list(Cupom.objects.filter(
+            ativo=True, valido_de__lte=timezone.localdate(), valido_ate__gte=timezone.localdate()
+        ).values("id", "tipo_desconto", "valor_desconto")),
+        "clientes": Cliente.objects.filter(ativo=True),
         "itens_cozinha_total": ComandaItem.objects.filter(comanda=comanda, produto__vai_para_cozinha=True).exclude(status_producao=ComandaItem.StatusProducao.CANCELADO).count(),
         "itens_cozinha_pendentes": ComandaItem.objects.filter(comanda=comanda, produto__vai_para_cozinha=True, cozinha_impresso_em__isnull=True).exclude(status_producao=ComandaItem.StatusProducao.CANCELADO).count(),
         "itens_consumo_total": comanda.itens.exclude(status_producao=ComandaItem.StatusProducao.CANCELADO).count(),
@@ -378,42 +463,50 @@ def registrar_pagamento(request, pk):
             messages.error(request, "Não existe conta a receber aberta para esta comanda encerrada.")
         elif not caixa:
             messages.error(request, "Abra o caixa antes de registrar recebimentos.")
-        elif comanda.total <= 0:
+        elif comanda.subtotal <= 0:
             messages.error(request, "Adicione pelo menos um item antes do recebimento.")
-        elif form.cleaned_data["valor"] > comanda.saldo:
-            messages.error(request, f"O valor supera o saldo de R$ {comanda.saldo:.2f}.")
         else:
-            forma = form.cleaned_data["forma"]
-            destino_financeiro, operacao = _destino_recebimento(forma)
-            if not destino_financeiro:
-                messages.error(request, "Configure o destino financeiro desta forma de recebimento na Tesouraria.")
-                return redirect("atendimento:comanda", pk=pk)
-            pagamento = Pagamento.objects.create(
-                comanda=comanda, caixa=caixa, forma=forma,
-                valor=form.cleaned_data["valor"], referencia=form.cleaned_data["referencia"],
-                criado_por=request.user, atualizado_por=request.user,
-            )
-            _gravar_recebimento(caixa=caixa, pagamento=pagamento, forma=forma, valor=pagamento.valor, usuario=request.user)
-            if conta:
-                conta.atualizar_status(request.user)
-            if comanda.saldo == 0:
-                if comanda.status == Comanda.Status.ABERTA:
-                    comanda.status = Comanda.Status.FECHADA
-                    comanda.fechada_em = timezone.now()
-                    comanda.atualizado_por = request.user
-                    comanda.save(update_fields=["status", "fechada_em", "atualizado_por", "atualizado_em"])
-                    conta, _ = ContaReceber.objects.get_or_create(
-                        comanda=comanda,
-                        defaults={"cliente": comanda.cliente, "valor_total": comanda.total,
-                                  "vencimento": timezone.localdate(), "criado_por": request.user,
-                                  "atualizado_por": request.user},
-                    )
-                    conta.atualizar_status(request.user)
-                    messages.success(request, "Recebimento quitado. Comanda encerrada e CR gerado como quitado.")
-                    return redirect("atendimento:inicio")
-                messages.success(request, "Recebimento registrado; conta a receber quitada.")
+            erro_desconto = _aplicar_desconto_comanda(comanda, form.cleaned_data, request.user) if comanda.status == Comanda.Status.ABERTA else None
+            if erro_desconto:
+                messages.error(request, erro_desconto)
+            elif comanda.total <= 0:
+                messages.error(request, "O total da comanda após o desconto precisa ser maior que zero.")
+            elif form.cleaned_data["valor"] > comanda.saldo:
+                messages.error(request, f"O valor supera o saldo de R$ {comanda.saldo:.2f}.")
             else:
-                messages.success(request, f"Recebimento registrado. Saldo restante: R$ {comanda.saldo:.2f}.")
+                forma = form.cleaned_data["forma"]
+                destino_financeiro, operacao = _destino_recebimento(forma)
+                if not destino_financeiro:
+                    messages.error(request, "Configure o destino financeiro desta forma de recebimento na Tesouraria.")
+                    return redirect("atendimento:comanda", pk=pk)
+                if comanda.status == Comanda.Status.ABERTA:
+                    _salvar_desconto_comanda(comanda)
+                pagamento = Pagamento.objects.create(
+                    comanda=comanda, caixa=caixa, forma=forma,
+                    valor=form.cleaned_data["valor"], referencia=form.cleaned_data["referencia"],
+                    criado_por=request.user, atualizado_por=request.user,
+                )
+                _gravar_recebimento(caixa=caixa, pagamento=pagamento, forma=forma, valor=pagamento.valor, usuario=request.user)
+                if conta:
+                    conta.atualizar_status(request.user)
+                if comanda.saldo == 0:
+                    if comanda.status == Comanda.Status.ABERTA:
+                        comanda.status = Comanda.Status.FECHADA
+                        comanda.fechada_em = timezone.now()
+                        comanda.atualizado_por = request.user
+                        comanda.save(update_fields=["status", "fechada_em", "atualizado_por", "atualizado_em"])
+                        conta, _ = ContaReceber.objects.get_or_create(
+                            comanda=comanda,
+                            defaults={"cliente": comanda.cliente, "valor_total": comanda.total,
+                                      "vencimento": timezone.localdate(), "criado_por": request.user,
+                                      "atualizado_por": request.user},
+                        )
+                        conta.atualizar_status(request.user)
+                        messages.success(request, "Recebimento quitado. Comanda encerrada e CR gerado como quitado.")
+                        return redirect("atendimento:inicio")
+                    messages.success(request, "Recebimento registrado; conta a receber quitada.")
+                else:
+                    messages.success(request, f"Recebimento registrado. Saldo restante: R$ {comanda.saldo:.2f}.")
     if comanda.status == Comanda.Status.FECHADA:
         return redirect("atendimento:contas_receber")
     return redirect("atendimento:comanda", pk=pk)
@@ -427,48 +520,53 @@ def fechar_comanda(request, pk):
         comanda = get_object_or_404(Comanda.objects.select_for_update().select_related("cliente"), pk=pk)
         form = EncerrarComandaForm(request.POST)
         if not form.is_valid():
-            messages.error(request, "Confira o cliente e o vencimento informados.")
+            messages.error(request, "Confira o cupom e os descontos informados.")
         elif comanda.status != Comanda.Status.ABERTA:
             messages.error(request, "A comanda já está encerrada.")
         elif not comanda.itens.exclude(status_producao=ComandaItem.StatusProducao.CANCELADO).exists():
             messages.error(request, "Adicione pelo menos um item válido antes de encerrar.")
-        elif comanda.saldo < 0:
-            messages.error(request, "O total recebido não pode superar o valor da comanda.")
         else:
-            cliente = form.cleaned_data.get("cliente") or comanda.cliente
-            if comanda.saldo > 0 and not cliente:
-                messages.error(request, "Selecione um cliente para encerrar a comanda a prazo.")
-            elif comanda.saldo > 0 and not form.cleaned_data.get("vencimento"):
-                messages.error(request, "Informe o vencimento da conta a receber.")
+            erro_desconto = _aplicar_desconto_comanda(comanda, form.cleaned_data, request.user)
+            if erro_desconto:
+                messages.error(request, erro_desconto)
+            elif comanda.saldo < 0:
+                messages.error(request, "O total recebido não pode superar o valor da comanda.")
             else:
-                comanda.itens.exclude(
-                    status_producao=ComandaItem.StatusProducao.CANCELADO
-                ).exclude(
-                    status_producao=ComandaItem.StatusProducao.PRONTO
-                ).update(
-                    status_producao=ComandaItem.StatusProducao.PRONTO
-                )
-                comanda.cliente = cliente
-                comanda.status = Comanda.Status.FECHADA
-                comanda.fechada_em = timezone.now()
-                comanda.atualizado_por = request.user
-                comanda.save(update_fields=["cliente", "status", "fechada_em", "atualizado_por", "atualizado_em"])
-                conta, _ = ContaReceber.objects.get_or_create(
-                    comanda=comanda,
-                    defaults={"cliente": cliente, "valor_total": comanda.total,
-                              "vencimento": form.cleaned_data.get("vencimento") or timezone.localdate(),
-                              "criado_por": request.user, "atualizado_por": request.user},
-                )
-                conta.cliente = cliente
-                conta.valor_total = comanda.total
-                conta.atualizado_por = request.user
-                conta.save(update_fields=["cliente", "valor_total", "atualizado_por", "atualizado_em"])
-                conta.atualizar_status(request.user)
-                if conta.status == ContaReceber.Status.QUITADA:
-                    messages.success(request, "Comanda encerrada e CR gerado como quitado.")
+                cliente = form.cleaned_data.get("cliente") or comanda.cliente
+                if comanda.saldo > 0 and not cliente:
+                    messages.error(request, "Selecione um cliente para encerrar a comanda a prazo.")
+                elif comanda.saldo > 0 and not form.cleaned_data.get("vencimento"):
+                    messages.error(request, "Informe o vencimento da conta a receber.")
                 else:
-                    messages.success(request, f"Comanda encerrada a prazo. CR #{conta.pk} criado para {cliente}.")
-                return redirect("atendimento:inicio")
+                    comanda.itens.exclude(
+                        status_producao=ComandaItem.StatusProducao.CANCELADO
+                    ).exclude(
+                        status_producao=ComandaItem.StatusProducao.PRONTO
+                    ).update(status_producao=ComandaItem.StatusProducao.PRONTO)
+                    comanda.cliente = cliente
+                    comanda.status = Comanda.Status.FECHADA
+                    comanda.fechada_em = timezone.now()
+                    comanda.atualizado_por = request.user
+                    comanda.save(update_fields=[
+                        "cliente", "status", "fechada_em", "cupom", "desconto_percentual",
+                        "desconto_valor", "atualizado_por", "atualizado_em",
+                    ])
+                    conta, _ = ContaReceber.objects.get_or_create(
+                        comanda=comanda,
+                        defaults={"cliente": cliente, "valor_total": comanda.total,
+                                  "vencimento": form.cleaned_data.get("vencimento") or timezone.localdate(),
+                                  "criado_por": request.user, "atualizado_por": request.user},
+                    )
+                    conta.cliente = cliente
+                    conta.valor_total = comanda.total
+                    conta.atualizado_por = request.user
+                    conta.save(update_fields=["cliente", "valor_total", "atualizado_por", "atualizado_em"])
+                    conta.atualizar_status(request.user)
+                    if conta.status == ContaReceber.Status.QUITADA:
+                        messages.success(request, "Comanda encerrada e CR gerado como quitado.")
+                    else:
+                        messages.success(request, f"Comanda encerrada a prazo. CR #{conta.pk} criado para {cliente}.")
+                    return redirect("atendimento:inicio")
     return redirect("atendimento:comanda", pk=pk)
 
 

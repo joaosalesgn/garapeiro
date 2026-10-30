@@ -10,7 +10,7 @@ from .models import (
     Adicional, Caixa, Categoria, Cliente, Comanda, ComandaItem,
     ItemAdicional, Mesa, MovimentacaoCaixa, Pagamento, Produto,
     ProdutoAdicional, TipoMovimentacao, ContaReceber, ContaPagar, BaixaContaPagar, Fornecedor,
-    ContaFinanceira, OperacaoFinanceira, LancamentoTesouraria, StatusAuditEvent
+    ContaFinanceira, OperacaoFinanceira, LancamentoTesouraria, StatusAuditEvent, Cupom
 )
 User = get_user_model()
 
@@ -221,6 +221,12 @@ class BaixaContaPagarAdmin(CriadoAtualizadoAdmin):
     list_display = ("conta", "caixa", "forma", "valor", "criado_em")
     list_filter = ("forma", "criado_em")
     list_select_related = ("conta", "caixa")
+
+@admin.register(Cupom)
+class CupomAdmin(CriadoAtualizadoAdmin):
+    list_display = ("codigo", "tipo_desconto", "valor_desconto", "valido_de", "valido_ate", "ativo")
+    list_filter = ("ativo", "tipo_desconto", "valido_de", "valido_ate")
+    search_fields = ("codigo",)
 
 
 class ProtectedUserAdmin(DjangoUserAdmin):

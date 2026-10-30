@@ -153,6 +153,39 @@ class Caixa(RegistroBase):
         return f"Caixa {self.pk} — {self.get_status_display()}"
 
 
+class Cupom(RegistroBase):
+    """Cupom promocional por valor fixo ou percentual, disponível em um período."""
+    class TipoDesconto(models.TextChoices):
+        VALOR = "VALOR", "Valor fixo"
+        PERCENTUAL = "PERCENTUAL", "Percentual"
+
+    codigo = models.CharField(max_length=40, unique=True)
+    tipo_desconto = models.CharField(max_length=12, choices=TipoDesconto.choices)
+    valor_desconto = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    valido_de = models.DateField()
+    valido_ate = models.DateField()
+    ativo = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "tab_cupom"
+        ordering = ["codigo"]
+        permissions = [("manage_cupons", "Pode cadastrar e gerenciar cupons")]
+        constraints = [
+            models.CheckConstraint(condition=Q(valor_desconto__gt=0), name="ck_cupom_desconto_positivo"),
+            models.CheckConstraint(condition=Q(tipo_desconto="VALOR") | Q(valor_desconto__lte=100), name="ck_cupom_percentual_ate_100"),
+            models.CheckConstraint(condition=Q(valido_ate__gte=models.F("valido_de")), name="ck_cupom_validade_ordem"),
+        ]
+        verbose_name = "cupom"
+        verbose_name_plural = "cupons"
+
+    def __str__(self):
+        unidade = "%" if self.tipo_desconto == self.TipoDesconto.PERCENTUAL else ""
+        return f"{self.codigo} — {self.valor_desconto}{unidade}"
+
+    def valido_em(self, data):
+        return self.ativo and self.valido_de <= data <= self.valido_ate
+
+
 class Comanda(RegistroCancelavel):
     class Status(models.TextChoices):
         ABERTA = "ABERTA", "Aberta"
@@ -170,6 +203,9 @@ class Comanda(RegistroCancelavel):
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="comandas", null=True, blank=True)
     fechada_em = models.DateTimeField(null=True, blank=True)
     observacao = models.TextField(blank=True)
+    cupom = models.ForeignKey(Cupom, on_delete=models.PROTECT, related_name="comandas", null=True, blank=True)
+    desconto_percentual = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(Decimal("0.01"))])
+    desconto_valor = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(0)])
 
     class Meta:
         db_table = "tab_comanda"
@@ -182,7 +218,7 @@ class Comanda(RegistroCancelavel):
         return f"Comanda {self.pk} — {self.get_status_display()}"
 
     @property
-    def total(self):
+    def subtotal(self):
         valor_item = models.DecimalField(max_digits=12, decimal_places=2)
         itens_validos = self.itens.exclude(status_producao=ComandaItem.StatusProducao.CANCELADO)
         produtos = itens_validos.aggregate(
@@ -194,6 +230,11 @@ class Comanda(RegistroCancelavel):
             valor=Sum(models.F("preco_unitario") * models.F("quantidade"), output_field=valor_item)
         )["valor"] or Decimal("0.00")
         return produtos + adicionais
+
+    @property
+    def total(self):
+        """Total líquido após desconto; pagamentos e CR usam este valor."""
+        return max(self.subtotal - self.desconto_valor, Decimal("0.00"))
 
     @property
     def total_pago(self):

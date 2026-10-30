@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}Cupons{% endblock %}
+{% block content %}
+<h1>Cupons de desconto</h1>
+<div class="grid">
+  <section class="card">
+    <h2>{% if editando %}Editar {{ editando.codigo }}{% else %}Cadastrar cupom{% endif %}</h2>
+    <form method="post">
+      {% csrf_token %}
+      {% if editando %}<input type="hidden" name="cupom_id" value="{{ editando.pk }}">{% endif %}
+      {{ form.non_field_errors }}
+      {% for field in form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}{% if field.help_text %}<small class="subtle">{{ field.help_text }}</small>{% endif %}</div>{% endfor %}
+      <button class="btn btn-primary" type="submit">Salvar cupom</button>
+      {% if editando %}<a class="btn" href="{% url 'atendimento:cupons' %}">Cancelar edição</a>{% endif %}
+    </form>
+  </section>
+  <section class="card">
+    <h2>Cupons cadastrados</h2>
+    {% for cupom in cupons %}
+      <div class="list-row">
+        <div class="list-row-main"><strong>{{ cupom.codigo }}</strong><div class="subtle">{% if cupom.tipo_desconto == 'PERCENTUAL' %}{{ cupom.valor_desconto }}%{% else %}R$ {{ cupom.valor_desconto|floatformat:2 }}{% endif %} · {{ cupom.valido_de|date:'d/m/Y' }} a {{ cupom.valido_ate|date:'d/m/Y' }}</div></div>
+        <div class="list-row-value"><span class="pill {% if not cupom.ativo or hoje < cupom.valido_de or hoje > cupom.valido_ate %}warn{% endif %}">{% if not cupom.ativo %}Inativo{% elif hoje < cupom.valido_de %}Agendado{% elif hoje > cupom.valido_ate %}Expirado{% else %}Ativo{% endif %}</span> <a href="{% url 'atendimento:editar_cupom' cupom.pk %}">Editar</a></div>
+      </div>
+    {% empty %}<div class="empty">Nenhum cupom cadastrado.</div>{% endfor %}
+  </section>
+</div>
+{% endblock %}

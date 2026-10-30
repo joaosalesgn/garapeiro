@@ -3,7 +3,8 @@ from decimal import Decimal
 from django import forms
 from django.core.exceptions import ValidationError
 from django.utils.formats import number_format
-from .models import (Adicional, BaixaContaPagar, Cliente, Comanda, ContaFinanceira, Fornecedor, Mesa, OperacaoFinanceira, Pagamento, Produto)
+from django.utils import timezone
+from .models import (Adicional, BaixaContaPagar, Cliente, Comanda, ContaFinanceira, Fornecedor, Mesa, OperacaoFinanceira, Pagamento, Produto, Cupom)
 
 
 class MoneyInput(forms.NumberInput):
@@ -129,7 +130,67 @@ class AdicionarItemForm(forms.Form):
         return dados
 
 
+
+class CupomForm(forms.ModelForm):
+    class Meta:
+        model = Cupom
+        fields = ["codigo", "tipo_desconto", "valor_desconto", "valido_de", "valido_ate", "ativo"]
+        widgets = {
+            "valido_de": forms.DateInput(attrs={"type": "date"}),
+            "valido_ate": forms.DateInput(attrs={"type": "date"}),
+        }
+
+    def clean_codigo(self):
+        return self.cleaned_data["codigo"].strip().upper()
+
+    def clean(self):
+        dados = super().clean()
+        if dados.get("tipo_desconto") == Cupom.TipoDesconto.PERCENTUAL and dados.get("valor_desconto") and dados["valor_desconto"] > 100:
+            self.add_error("valor_desconto", "O percentual não pode ultrapassar 100%.")
+        if dados.get("valido_de") and dados.get("valido_ate") and dados["valido_ate"] < dados["valido_de"]:
+            self.add_error("valido_ate", "A data final não pode ser anterior à data inicial.")
+        return dados
+
+
+def _campos_desconto():
+    return {
+        "cupom": forms.ModelChoiceField(
+            queryset=Cupom.objects.none(), required=False, label="Cupom",
+            empty_label="Sem cupom", help_text="São exibidos somente cupons ativos e válidos hoje.",
+        ),
+        "desconto_percentual": forms.DecimalField(
+            required=False, min_value=Decimal("0.01"), max_value=Decimal("100.00"),
+            max_digits=5, decimal_places=2, label="Desconto (%)",
+        ),
+        "desconto_valor": forms.DecimalField(
+            required=False, min_value=Decimal("0.00"), max_digits=10,
+            decimal_places=2, widget=MoneyInput(attrs={"class": "form-control"}),
+        )
+    }
+
+
+def _inicializar_cupons(form):
+    form.fields["cupom"].queryset = Cupom.objects.filter(
+        ativo=True, valido_de__lte=timezone.localdate(), valido_ate__gte=timezone.localdate()
+    ).order_by("codigo")
+
+
 class PagamentoForm(forms.Form):
+    cupom = _campos_desconto()["cupom"]
+    desconto_percentual = forms.DecimalField(
+        required=False,
+        min_value=Decimal("0.00"),
+        max_value=Decimal("100.00"),
+        max_digits=5,
+        decimal_places=2,
+    )
+    desconto_valor = forms.DecimalField(
+        required=False,
+        min_value=Decimal("0.00"),
+        max_digits=10,
+        decimal_places=2,
+        widget=MoneyInput(attrs={"class": "form-control"}),
+    )
     forma = forms.ChoiceField(choices=(), label="Forma de recebimento", widget=forms.Select(attrs={"class": "form-select"}))
     valor = forms.DecimalField(min_value=Decimal("0.01"), max_digits=10, decimal_places=2, label="Valor", widget=MoneyInput(attrs={"class": "form-control", "step": "0.01"}))
     referencia = forms.CharField(
@@ -142,6 +203,7 @@ class PagamentoForm(forms.Form):
 
     def __init__(self, *args, operacoes=None, **kwargs):
         super().__init__(*args, **kwargs)
+        _inicializar_cupons(self)
         operacoes = (
             operacoes
             if operacoes is not None
@@ -179,8 +241,15 @@ class MovimentacaoForm(forms.Form):
 
 
 class EncerrarComandaForm(forms.Form):
+    cupom = _campos_desconto()["cupom"]
+    desconto_percentual = _campos_desconto()["desconto_percentual"]
+    desconto_valor = _campos_desconto()["desconto_valor"]
     cliente = forms.ModelChoiceField(queryset=Cliente.objects.filter(ativo=True), required=False, label="Cliente")
     vencimento = forms.DateField(required=False, label="Vencimento", widget=forms.DateInput(attrs={"type": "date"}))
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _inicializar_cupons(self)
 
 
 class NovaContaPagarForm(forms.Form):

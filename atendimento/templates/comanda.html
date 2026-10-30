@@ -172,12 +172,14 @@
                         </p>
                         <form method="post" action="{% url 'atendimento:registrar_pagamento' comanda.pk %}">
                             {% csrf_token %}
-                            <div class="payment-form-grid">
-                                {% for field in pagamento_form %}
-                                <div class="field">
-                                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}
-                                </div>
-                                {% endfor %}
+                            <div class="payment-form-grid" data-desconto-form data-subtotal="{{ comanda.subtotal|unlocalize }}" data-ja-pago="{{ comanda.total_pago|unlocalize }}">
+                                <div class="field"><label for="{{ pagamento_form.cupom.id_for_label }}">Cupom</label>{{ pagamento_form.cupom }}{{ pagamento_form.cupom.errors }}</div>
+                                <div class="field"><label for="{{ pagamento_form.desconto_percentual.id_for_label }}">Desconto (%)</label>{{ pagamento_form.desconto_percentual }}{{ pagamento_form.desconto_percentual.errors }}</div>
+                                <div class="field"><label for="{{ pagamento_form.desconto_valor.id_for_label }}">Desconto (R$)</label>{{ pagamento_form.desconto_valor }}{{ pagamento_form.desconto_valor.errors }}</div>
+                                <div class="field"><label for="{{ pagamento_form.forma.id_for_label }}">{{ pagamento_form.forma.label }}</label>{{ pagamento_form.forma }}{{ pagamento_form.forma.errors }}</div>
+                                <div class="field"><label for="{{ pagamento_form.valor.id_for_label }}">{{ pagamento_form.valor.label }}</label>{{ pagamento_form.valor }}{{ pagamento_form.valor.errors }}</div>
+                                <div class="field"><label for="{{ pagamento_form.referencia.id_for_label }}">{{ pagamento_form.referencia.label }}</label>{{ pagamento_form.referencia }}{{ pagamento_form.referencia.errors }}</div>
+                                <p class="subtle" data-resumo-desconto>Subtotal: R$ {{ comanda.subtotal|floatformat:2 }} · Desconto: R$ {{ comanda.desconto_valor|floatformat:2 }} · Saldo: R$ {{ comanda.saldo|floatformat:2 }}</p>
                             </div>
                             <button class="btn btn-success" type="submit">Registrar pagamento</button>
                         </form>
@@ -220,6 +222,7 @@
                 {% endif %}
                 <form method="post" action="{% url 'atendimento:fechar_comanda' comanda.pk %}">
                     {% csrf_token %}
+
                     {% if comanda.saldo > 0 %}
                         <div class="campos-encerramento">
                             <div class="field">
@@ -240,10 +243,12 @@
                             </div>
                         </div>
                     {% endif %}
-                    <button type="submit" onclick="return confirm('Confirmar encerramento da comanda?')">Encerrar comanda
-                    {% if comanda.saldo > 0 %}
-                        e lançar no CR
-                    {% endif %}
+
+                    <button type="submit" onclick="return confirm('Confirmar encerramento da comanda?')">
+                        Encerrar comanda
+                        {% if comanda.saldo > 0 %}
+                            e lançar no CR
+                        {% endif %}
                     </button>
                 </form>
             </section>
@@ -264,143 +269,234 @@
             {% endfor %}
         </section>
     {% endif %}
+    {{ cupons_js|json_script:"cupons-json" }}
     <script>
-  (function () {
-    const cozinhaForm = document.querySelector('[data-cozinha-form]');
-    if (cozinhaForm) {
-      cozinhaForm.addEventListener('submit', function (event) {
-        const pendentes = Number(cozinhaForm.dataset.pendentes || 0);
-        const total = Number(cozinhaForm.dataset.total || 0);
-        const campo = cozinhaForm.querySelector('[data-reimprimir-tudo]');
-        campo.value = '0';
-        if (total > 0 && pendentes === 0) {
-          if (!window.confirm('Todos os produtos da cozinha já foram impressos. Deseja imprimir todos novamente?')) {
-            event.preventDefault();
-            return;
-          }
-          campo.value = '1';
-        }
-      });
-    }
-    const produto = document.getElementById('id_produto');
-    const adicionais = document.getElementById('adicionais-opcoes');
-    if (!produto || !adicionais) return;
-    produto.addEventListener('change', function () {
-      adicionais.innerHTML = '<span class="subtle">Carregando adicionais…</span>';
-      const url = new URL(window.location.href);
-      url.searchParams.set('produto', produto.value);
-      fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-        .then(r => r.text())
-        .then(html => {
-          const doc = new DOMParser().parseFromString(html, 'text/html');
-          const novo = doc.getElementById('adicionais-opcoes');
-          if (novo) adicionais.innerHTML = novo.innerHTML;
-        })
-        .catch(() => { adicionais.innerHTML = '<span class="subtle">Não foi possível carregar os adicionais. Tente novamente.</span>'; });
-    });
+        (function () {
+            const elementoCupons = document.getElementById('cupons-json');
+            const cupons = elementoCupons ? JSON.parse(elementoCupons.textContent || '[]') : [];
 
-    const picker = document.querySelector('[data-product-picker]');
-    if (!picker) return;
-    const select = picker.querySelector('select');
-    const trigger = picker.querySelector('[data-picker-trigger]');
-    const panel = picker.querySelector('[data-picker-panel]');
-    const search = picker.querySelector('[data-picker-search]');
-    const current = picker.querySelector('[data-picker-current]');
-    const options = Array.from(picker.querySelectorAll('.product-picker-option'));
-    const noResults = picker.querySelector('[data-picker-no-results]');
-    const error = picker.querySelector('[data-picker-error]');
-    const form = picker.closest('form');
+            function numero(valor) {
+            const texto = String(valor ?? '').trim();
+            if (!texto) return 0;
 
-    picker.classList.add('is-enhanced');
-    select.required = false;
+            const normalizado = texto.includes(',')
+                ? texto.replace(/\./g, '').replace(',', '.')
+                : texto;
 
-    function closePicker() {
-      panel.hidden = true;
-      trigger.setAttribute('aria-expanded', 'false');
-    }
+            const resultado = Number(normalizado);
+            return Number.isFinite(resultado) ? resultado : 0;
+            }
 
-    function openPicker() {
-      panel.hidden = false;
-      trigger.setAttribute('aria-expanded', 'true');
-      search.value = '';
-      filterOptions('');
-      search.focus();
-    }
+            document.querySelectorAll('[data-desconto-form]').forEach(form => {
+            const cupom = form.querySelector('[name="cupom"]');
+            const percentual = form.querySelector('[name="desconto_percentual"]');
+            const valor = form.querySelector('[name="desconto_valor"]');
+            const resumo = form.querySelector('[data-resumo-desconto]');
+            const pagamento = form.querySelector('[name="valor"]');
+            const subtotal = numero(form.dataset.subtotal);
+            const jaPago = numero(form.dataset.jaPago);
 
-    function filterOptions(query) {
-      const normalized = query.trim().toLocaleLowerCase();
-      let visible = 0;
-      options.forEach(option => {
-        const match = option.dataset.search.toLocaleLowerCase().includes(normalized);
-        option.hidden = !match;
-        if (match) visible += 1;
-      });
-      noResults.hidden = visible > 0;
-    }
+            function atualizar(preencherPagamento) {
+                const selecionado = cupom
+                ? cupons.find(c => String(c.id) === cupom.value)
+                : null;
 
-    function syncSelection() {
-      const selected = options.find(option => option.dataset.value === select.value);
-      current.textContent = selected ? selected.querySelector('.product-option-name').textContent : 'Selecione um produto';
-      options.forEach(option => option.setAttribute('aria-selected', String(option === selected)));
-    }
+                if (selecionado) {
+                if (selecionado.tipo_desconto === 'PERCENTUAL') {
+                    percentual.value = numero(selecionado.valor_desconto).toFixed(2);
+                    valor.value = '';
+                } else {
+                    valor.value = numero(selecionado.valor_desconto).toFixed(2);
+                    percentual.value = '';
+                }
+                }
 
-    trigger.addEventListener('click', () => {
-      if (panel.hidden) openPicker();
-      else closePicker();
-    });
+                const pct = numero(percentual.value);
+                const fixo = numero(valor.value);
+                const descontoCalculado = selecionado
+                ? (selecionado.tipo_desconto === 'PERCENTUAL'
+                    ? subtotal * pct / 100
+                    : fixo)
+                : (pct > 0 ? subtotal * pct / 100 : fixo);
 
-    search.addEventListener('input', () => filterOptions(search.value));
-    search.addEventListener('keydown', event => {
-      if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        const first = options.find(option => !option.hidden);
-        if (first) first.focus();
-      } else if (event.key === 'Escape') {
-        closePicker();
-        trigger.focus();
-      }
-    });
+                const desconto = Math.max(
+                0,
+                Math.min(subtotal, Math.round((descontoCalculado + Number.EPSILON) * 100) / 100)
+                );
+                const total = Math.max(0, subtotal - desconto);
+                const saldo = Math.max(0, total - jaPago);
 
-    options.forEach((option, index) => {
-      option.addEventListener('click', () => {
-        select.value = option.dataset.value;
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-        error.hidden = true;
-        syncSelection();
-        closePicker();
-        trigger.focus();
-      });
-      option.addEventListener('keydown', event => {
-        if (event.key === 'Escape') {
-          closePicker();
-          trigger.focus();
-        } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-          event.preventDefault();
-          const direction = event.key === 'ArrowDown' ? 1 : -1;
-          let nextIndex = index + direction;
-          while (nextIndex >= 0 && nextIndex < options.length && options[nextIndex].hidden) nextIndex += direction;
-          if (options[nextIndex] && !options[nextIndex].hidden) options[nextIndex].focus();
-          else if (direction < 0) search.focus();
-        } else if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          option.click();
-        }
-      });
-    });
+                if (resumo) {
+                resumo.textContent =
+                    `Subtotal: R$ ${subtotal.toFixed(2)} · Desconto: R$ ${desconto.toFixed(2)} · Saldo: R$ ${saldo.toFixed(2)}`;
+                }
 
-    document.addEventListener('click', event => {
-      if (!picker.contains(event.target)) closePicker();
-    });
+                if (pagamento && preencherPagamento) {
+                pagamento.value = saldo.toFixed(2);
+                pagamento.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            }
 
-    form.addEventListener('submit', event => {
-      if (!select.value) {
-        event.preventDefault();
-        error.hidden = false;
-        trigger.focus();
-      }
-    });
+            if (cupom) {
+                cupom.addEventListener('change', () => atualizar(true));
+            }
 
-    syncSelection();
-  })();
-</script>
+            function atualizarDescontoManual() {
+                if (cupom) cupom.value = '';
+                window.requestAnimationFrame(() => atualizar(true));
+            }
+
+            if (percentual) {
+                percentual.addEventListener('input', atualizarDescontoManual);
+            }
+
+            if (valor) {
+                valor.addEventListener('input', atualizarDescontoManual);
+            }
+
+            atualizar(true);
+            });
+
+            const cozinhaForm = document.querySelector('[data-cozinha-form]');
+            if (cozinhaForm) {
+            cozinhaForm.addEventListener('submit', function (event) {
+                const pendentes = Number(cozinhaForm.dataset.pendentes || 0);
+                const total = Number(cozinhaForm.dataset.total || 0);
+                const campo = cozinhaForm.querySelector('[data-reimprimir-tudo]');
+                campo.value = '0';
+                if (total > 0 && pendentes === 0) {
+                if (!window.confirm('Todos os produtos da cozinha já foram impressos. Deseja imprimir todos novamente?')) {
+                    event.preventDefault();
+                    return;
+                }
+                campo.value = '1';
+                }
+            });
+            }
+
+            const produto = document.getElementById('id_produto');
+            const adicionais = document.getElementById('adicionais-opcoes');
+            if (!produto || !adicionais) return;
+
+            produto.addEventListener('change', function () {
+            adicionais.innerHTML = '<span class="subtle">Carregando adicionais…</span>';
+            const url = new URL(window.location.href);
+            url.searchParams.set('produto', produto.value);
+            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(r => r.text())
+                .then(html => {
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const novo = doc.getElementById('adicionais-opcoes');
+                if (novo) adicionais.innerHTML = novo.innerHTML;
+                })
+                .catch(() => {
+                adicionais.innerHTML = '<span class="subtle">Não foi possível carregar os adicionais. Tente novamente.</span>';
+                });
+            });
+
+            const picker = document.querySelector('[data-product-picker]');
+            if (!picker) return;
+
+            const select = picker.querySelector('select');
+            const trigger = picker.querySelector('[data-picker-trigger]');
+            const panel = picker.querySelector('[data-picker-panel]');
+            const search = picker.querySelector('[data-picker-search]');
+            const current = picker.querySelector('[data-picker-current]');
+            const options = Array.from(picker.querySelectorAll('.product-picker-option'));
+            const noResults = picker.querySelector('[data-picker-no-results]');
+            const error = picker.querySelector('[data-picker-error]');
+            const form = picker.closest('form');
+
+            picker.classList.add('is-enhanced');
+            select.required = false;
+
+            function closePicker() {
+            panel.hidden = true;
+            trigger.setAttribute('aria-expanded', 'false');
+            }
+
+            function openPicker() {
+            panel.hidden = false;
+            trigger.setAttribute('aria-expanded', 'true');
+            search.value = '';
+            filterOptions('');
+            search.focus();
+            }
+
+            function filterOptions(query) {
+            const normalized = query.trim().toLocaleLowerCase();
+            let visible = 0;
+            options.forEach(option => {
+                const match = option.dataset.search.toLocaleLowerCase().includes(normalized);
+                option.hidden = !match;
+                if (match) visible += 1;
+            });
+            noResults.hidden = visible > 0;
+            }
+
+            function syncSelection() {
+            const selected = options.find(option => option.dataset.value === select.value);
+            current.textContent = selected ? selected.querySelector('.product-option-name').textContent : 'Selecione um produto';
+            options.forEach(option => option.setAttribute('aria-selected', String(option === selected)));
+            }
+
+            trigger.addEventListener('click', () => {
+            if (panel.hidden) openPicker();
+            else closePicker();
+            });
+
+            search.addEventListener('input', () => filterOptions(search.value));
+            search.addEventListener('keydown', event => {
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                const first = options.find(option => !option.hidden);
+                if (first) first.focus();
+            } else if (event.key === 'Escape') {
+                closePicker();
+                trigger.focus();
+            }
+            });
+
+            options.forEach((option, index) => {
+            option.addEventListener('click', () => {
+                select.value = option.dataset.value;
+                select.dispatchEvent(new Event('change', { bubbles: true }));
+                error.hidden = true;
+                syncSelection();
+                closePicker();
+                trigger.focus();
+            });
+            option.addEventListener('keydown', event => {
+                if (event.key === 'Escape') {
+                closePicker();
+                trigger.focus();
+                } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                const direction = event.key === 'ArrowDown' ? 1 : -1;
+                let nextIndex = index + direction;
+                while (nextIndex >= 0 && nextIndex < options.length && options[nextIndex].hidden) nextIndex += direction;
+                if (options[nextIndex] && !options[nextIndex].hidden) options[nextIndex].focus();
+                else if (direction < 0) search.focus();
+                } else if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                option.click();
+                }
+            });
+            });
+
+            document.addEventListener('click', event => {
+            if (!picker.contains(event.target)) closePicker();
+            });
+
+            form.addEventListener('submit', event => {
+            if (!select.value) {
+                event.preventDefault();
+                error.hidden = false;
+                trigger.focus();
+            }
+            });
+
+            syncSelection();
+        })();
+    </script>
 {% endblock %}
