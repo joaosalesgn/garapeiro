@@ -136,8 +136,8 @@ class ComandaAdmin(CriadoAtualizadoAdmin):
 
 @admin.register(ComandaItem)
 class ComandaItemAdmin(CriadoAtualizadoAdmin):
-    list_display = ("comanda", "produto_nome", "quantidade", "preco_unitario", "status_producao")
-    list_filter = ("status_producao", "criado_em")
+    list_display = ("comanda", "produto_nome", "quantidade", "preco_unitario", "cancelado", "cozinha_impresso_em")
+    list_filter = ("cancelado", "criado_em", "cozinha_impresso_em")
     search_fields = ("produto_nome", "comanda__id")
     list_select_related = ("comanda", "produto")
     inlines = (ItemAdicionalInline,)

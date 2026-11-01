@@ -58,7 +58,7 @@ class CadastrosEAtendimentoTests(TestCase):
          criado_por=self.user, atualizado_por=self.user)
         adicional = Adicional.objects.create(nome="Queijo extra", preco="2.00", criado_por=self.user, atualizado_por=self.user)
         ItemAdicional.objects.create(item=item, adicional=adicional, adicional_nome=adicional.nome, quantidade=1, preco_unitario="2.00", criado_por=self.user, atualizado_por=self.user)
-        item.status_producao = ComandaItem.StatusProducao.CANCELADO
+        item.cancelado = True
         item.atualizado_por = self.user
         item.save()
         item.refresh_from_db()

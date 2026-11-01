@@ -60,7 +60,7 @@
                 <div class="list-row-main">
                     <strong>{{ item.quantidade }} × {{ item.produto_nome }}</strong>
                     <div class="subtle">
-                        {{ item.get_status_producao_display }}
+                        {% if item.cancelado %}Cancelado{% endif %}
                         {% if item.observacao %}
                             · {{ item.observacao }}
                         {% endif %}
@@ -73,7 +73,7 @@
                 </div>
                 <div class="list-row-value">
                     <strong>R$ {{ item.total|floatformat:2 }}</strong>
-                    {% if comanda.status == 'ABERTA' and item.status_producao != 'CANCELADO' and perms.atendimento.change_comandaitem %}
+                    {% if comanda.status == 'ABERTA' and not item.cancelado and perms.atendimento.change_comandaitem %}
                         <form class="inline" method="post" action="{% url 'atendimento:cancelar_item' comanda.pk item.pk %}">
                             {% csrf_token %}
                             <button class="danger" type="submit" onclick="return confirm('Cancelar este item?')">Cancelar</button>

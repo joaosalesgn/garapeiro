@@ -220,13 +220,13 @@ class Comanda(RegistroCancelavel):
     @property
     def subtotal(self):
         valor_item = models.DecimalField(max_digits=12, decimal_places=2)
-        itens_validos = self.itens.exclude(status_producao=ComandaItem.StatusProducao.CANCELADO)
+        itens_validos = self.itens.filter(cancelado=False)
         produtos = itens_validos.aggregate(
             valor=Sum(models.F("preco_unitario") * models.F("quantidade"), output_field=valor_item)
         )["valor"] or Decimal("0.00")
         adicionais = ItemAdicional.objects.filter(
             item__comanda=self
-        ).exclude(item__status_producao=ComandaItem.StatusProducao.CANCELADO).aggregate(
+        ).filter(item__cancelado=False).aggregate(
             valor=Sum(models.F("preco_unitario") * models.F("quantidade"), output_field=valor_item)
         )["valor"] or Decimal("0.00")
         return produtos + adicionais
@@ -246,25 +246,18 @@ class Comanda(RegistroCancelavel):
 
 
 class ComandaItem(RegistroBase):
-    class StatusProducao(models.TextChoices):
-        PENDENTE = "PENDENTE", "Pendente"
-        ENVIADO = "ENVIADO", "Enviado à cozinha"
-        PRONTO = "PRONTO", "Pronto"
-        CANCELADO = "CANCELADO", "Cancelado"
-
     comanda = models.ForeignKey(Comanda, on_delete=models.CASCADE, related_name="itens")
     produto = models.ForeignKey(Produto, on_delete=models.PROTECT, related_name="itens_comanda")
     produto_nome = models.CharField(max_length=120, help_text="Nome registrado na venda, preservado como histórico.")
     quantidade = models.PositiveSmallIntegerField(validators=[MinValueValidator(1)])
     preco_unitario = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
-    status_producao = models.CharField(max_length=10, choices=StatusProducao.choices, default=StatusProducao.PENDENTE)
+    cancelado = models.BooleanField(default=False, help_text="Marca se o item foi cancelado sem apagar seu histórico.")
     cozinha_impresso_em = models.DateTimeField(null=True, blank=True, help_text="Data e hora em que o item foi enviado à impressora da cozinha.")
     observacao = models.CharField(max_length=250, blank=True)
 
     class Meta:
         db_table = "tab_comanda_item"
         ordering = ["criado_em", "id"]
-        indexes = [models.Index(fields=["comanda", "status_producao"], name="ix_item_comanda_status")]
         constraints = [
             models.CheckConstraint(condition=Q(quantidade__gte=1), name="ck_item_quantidade_positiva"),
             models.CheckConstraint(condition=Q(preco_unitario__gte=0), name="ck_item_preco_nao_negativo"),

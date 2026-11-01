@@ -25,17 +25,6 @@
                 <a href="{% url 'atendimento:comandas' %}">Ir para atendimento →</a>
             </section>
         {% endif %}
-        {% if pode_cozinha %}
-            <section class="card">
-                <div class="muted">
-                    Itens em produção
-                </div>
-                <div class="metric">
-                    {{ itens_cozinha }}
-                </div>
-                <a href="{% url 'atendimento:cozinha' %}">Abrir painel da cozinha →</a>
-            </section>
-        {% endif %}
         {% if pode_caixa %}
             <section class="card">
                 <div class="muted">

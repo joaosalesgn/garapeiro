@@ -488,3 +488,10 @@ Este pacote contém o projeto Django atualizado com cadastro relacional de forne
 A migração transforma nomes existentes de fornecedores em registros da nova tabela sem descartar contas a pagar. Os fornecedores podem ser mantidos em **Cadastros → Fornecedores**. Cadastre os novos fornecedores antes de associá-los às contas.
 
 O Bootstrap 5.3.3 é carregado do jsDelivr e precisa de conexão à internet. Os estilos específicos estão em `static/css/`.
+
+
+# Atualização — envio direto dos itens à cozinha
+
+O painel separado da cozinha e as ações para alterar itens para “pronto” foram removidos. O envio permanece no botão da comanda. `cozinha_impresso_em` registra cada impressão aceita: novos envios incluem apenas itens ainda não impressos, e a reimpressão total continua explícita e pede confirmação. A comanda mostra “Aguardando envio à cozinha” ou “Enviado à cozinha” com base nesse registro.
+
+A migração `0014_remover_status_producao` preserva os itens cancelados no campo `cancelado` e remove o status operacional. Antes de atualizar, feche o sistema e faça backup do banco local; aplique a migração com o servidor parado. Não substitua o banco de produção. Os testes não foram executados, conforme solicitado.

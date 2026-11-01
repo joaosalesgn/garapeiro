@@ -9,7 +9,6 @@ from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required, permission_required
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch, Sum
-from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -185,7 +184,6 @@ def _salvar_desconto_comanda(comanda):
 @login_required
 def inicio(request):
     pode_atendimento = request.user.has_perm("atendimento.view_comanda")
-    pode_cozinha = request.user.has_perm("atendimento.view_comandaitem")
     pode_caixa = request.user.has_perm("atendimento.view_caixa")
     pode_abrir_comanda = request.user.has_perm("atendimento.add_comanda")
     comandas_abertas = (
@@ -214,13 +212,8 @@ def inicio(request):
         "mesas": mesas, "total_mesas": mesas.count(),
         "comandas_balcao_entrega": comandas_balcao_entrega,
         "total_comandas": comandas_abertas.count(),
-        "itens_cozinha": ComandaItem.objects.filter(
-            status_producao=ComandaItem.StatusProducao.ENVIADO,
-            comanda__status=Comanda.Status.ABERTA,
-        ).count() if pode_cozinha else 0,
         "caixa": _caixa_aberto() if pode_caixa else None,
         "pode_atendimento": pode_atendimento,
-        "pode_cozinha": pode_cozinha,
         "pode_caixa": pode_caixa,
         "pode_abrir_comanda": pode_abrir_comanda,
         "pode_movimentar": request.user.has_perm("atendimento.add_movimentacaocaixa"),
@@ -330,9 +323,9 @@ def detalhe_comanda(request, pk):
             ativo=True, valido_de__lte=timezone.localdate(), valido_ate__gte=timezone.localdate()
         ).values("id", "tipo_desconto", "valor_desconto")),
         "clientes": Cliente.objects.filter(ativo=True),
-        "itens_cozinha_total": ComandaItem.objects.filter(comanda=comanda, produto__vai_para_cozinha=True).exclude(status_producao=ComandaItem.StatusProducao.CANCELADO).count(),
-        "itens_cozinha_pendentes": ComandaItem.objects.filter(comanda=comanda, produto__vai_para_cozinha=True, cozinha_impresso_em__isnull=True).exclude(status_producao=ComandaItem.StatusProducao.CANCELADO).count(),
-        "itens_consumo_total": comanda.itens.exclude(status_producao=ComandaItem.StatusProducao.CANCELADO).count(),
+        "itens_cozinha_total": ComandaItem.objects.filter(comanda=comanda, produto__vai_para_cozinha=True, cancelado=False).count(),
+        "itens_cozinha_pendentes": ComandaItem.objects.filter(comanda=comanda, produto__vai_para_cozinha=True, cozinha_impresso_em__isnull=True, cancelado=False).count(),
+        "itens_consumo_total": comanda.itens.filter(cancelado=False).count(),
     })
 
 
@@ -347,7 +340,7 @@ def imprimir_comanda_cozinha(request, pk):
             comanda = get_object_or_404(Comanda.objects.select_for_update().select_related("mesa", "cliente"), pk=pk)
             base = ComandaItem.objects.select_for_update().filter(
                 comanda=comanda, produto__vai_para_cozinha=True
-            ).exclude(status_producao=ComandaItem.StatusProducao.CANCELADO)
+            ).filter(cancelado=False)
             itens = list(base.prefetch_related("adicionais")) if reimprimir_tudo else list(
                 base.filter(cozinha_impresso_em__isnull=True).prefetch_related("adicionais")
             )
@@ -373,9 +366,7 @@ def imprimir_comanda_cozinha(request, pk):
 @permission_required("atendimento.view_comanda", raise_exception=True)
 def imprimir_comanda_consumo(request, pk):
     comanda = get_object_or_404(Comanda.objects.select_related("mesa", "cliente"), pk=pk)
-    itens = list(comanda.itens.exclude(
-        status_producao=ComandaItem.StatusProducao.CANCELADO
-    ).prefetch_related("adicionais"))
+    itens = list(comanda.itens.filter(cancelado=False).prefetch_related("adicionais"))
     if not itens:
         messages.info(request, "Esta comanda ainda não possui itens para imprimir.")
         return redirect("atendimento:comanda", pk=pk)
@@ -408,10 +399,7 @@ def adicionar_item(request, pk):
         item = ComandaItem.objects.create(
             comanda=comanda, produto=produto, produto_nome=produto.nome,
             quantidade=dados["quantidade"], preco_unitario=produto.preco,
-            observacao=dados["observacao"], status_producao=(
-                ComandaItem.StatusProducao.ENVIADO if produto.vai_para_cozinha
-                else ComandaItem.StatusProducao.PRONTO
-            ), criado_por=request.user, atualizado_por=request.user,
+            observacao=dados["observacao"], criado_por=request.user, atualizado_por=request.user,
         )
         for adicional in dados["adicionais"]:
             ItemAdicional.objects.create(
@@ -432,16 +420,16 @@ def cancelar_item(request, pk, item_id):
         item = get_object_or_404(ComandaItem.objects.select_for_update(), pk=item_id, comanda=comanda)
         if comanda.status != Comanda.Status.ABERTA:
             messages.error(request, "A comanda já foi encerrada.")
-        elif item.status_producao == ComandaItem.StatusProducao.CANCELADO:
+        elif item.cancelado:
             messages.info(request, "Este item já foi cancelado.")
         else:
             adicionais = sum((ad.total for ad in item.adicionais.all()), Decimal("0.00"))
             if comanda.total - item.total - adicionais < comanda.total_pago:
                 messages.error(request, "Não é possível cancelar este item: há pagamentos já registrados que superariam o novo total da comanda.")
                 return redirect("atendimento:comanda", pk=pk)
-            item.status_producao = ComandaItem.StatusProducao.CANCELADO
+            item.cancelado = True
             item.atualizado_por = request.user
-            item.save(update_fields=["status_producao", "atualizado_por", "atualizado_em"])
+            item.save(update_fields=["cancelado", "atualizado_por", "atualizado_em"])
             messages.success(request, "Item cancelado; o histórico foi preservado.")
     return redirect("atendimento:comanda", pk=pk)
 
@@ -523,7 +511,7 @@ def fechar_comanda(request, pk):
             messages.error(request, "Confira o cupom e os descontos informados.")
         elif comanda.status != Comanda.Status.ABERTA:
             messages.error(request, "A comanda já está encerrada.")
-        elif not comanda.itens.exclude(status_producao=ComandaItem.StatusProducao.CANCELADO).exists():
+        elif not comanda.itens.filter(cancelado=False).exists():
             messages.error(request, "Adicione pelo menos um item válido antes de encerrar.")
         else:
             erro_desconto = _aplicar_desconto_comanda(comanda, form.cleaned_data, request.user)
@@ -538,11 +526,6 @@ def fechar_comanda(request, pk):
                 elif comanda.saldo > 0 and not form.cleaned_data.get("vencimento"):
                     messages.error(request, "Informe o vencimento da conta a receber.")
                 else:
-                    comanda.itens.exclude(
-                        status_producao=ComandaItem.StatusProducao.CANCELADO
-                    ).exclude(
-                        status_producao=ComandaItem.StatusProducao.PRONTO
-                    ).update(status_producao=ComandaItem.StatusProducao.PRONTO)
                     comanda.cliente = cliente
                     comanda.status = Comanda.Status.FECHADA
                     comanda.fechada_em = timezone.now()
@@ -667,43 +650,6 @@ def baixar_conta_pagar(request, pk):
             conta.atualizar_status(request.user)
             messages.success(request, f"Pagamento registrado na CP #{conta.pk}.")
     return redirect("atendimento:contas_pagar")
-
-
-@login_required
-@permission_required("atendimento.view_comandaitem", raise_exception=True)
-def cozinha(request):
-    itens = ComandaItem.objects.filter(
-        comanda__status__in=[Comanda.Status.ABERTA, Comanda.Status.FECHADA],
-        status_producao__in=[ComandaItem.StatusProducao.PENDENTE, ComandaItem.StatusProducao.ENVIADO],
-        produto__vai_para_cozinha=True,
-    ).select_related("comanda", "comanda__mesa", "produto").prefetch_related("adicionais")
-    return render(request, "cozinha.html", {"itens": itens})
-
-
-@login_required
-@require_POST
-@permission_required("atendimento.change_comandaitem", raise_exception=True)
-def atualizar_cozinha(request, item_id, status):
-    permitidos = {ComandaItem.StatusProducao.ENVIADO, ComandaItem.StatusProducao.PRONTO}
-    if status not in permitidos:
-        raise Http404
-    with transaction.atomic():
-        item = get_object_or_404(ComandaItem.objects.select_for_update(), pk=item_id)
-        if item.comanda.status not in {Comanda.Status.ABERTA, Comanda.Status.FECHADA} or item.status_producao == ComandaItem.StatusProducao.CANCELADO:
-            messages.error(request, "Este item não está disponível para atualização.")
-        else:
-            transicoes = {
-                ComandaItem.StatusProducao.PENDENTE: ComandaItem.StatusProducao.ENVIADO,
-                ComandaItem.StatusProducao.ENVIADO: ComandaItem.StatusProducao.PRONTO,
-            }
-            if transicoes.get(item.status_producao) != status:
-                messages.error(request, "Transição de status inválida para este item.")
-                return redirect("atendimento:cozinha")
-            item.status_producao = status
-            item.atualizado_por = request.user
-            item.save(update_fields=["status_producao", "atualizado_por", "atualizado_em"])
-            messages.success(request, "Status atualizado na cozinha.")
-    return redirect("atendimento:cozinha")
 
 
 @login_required

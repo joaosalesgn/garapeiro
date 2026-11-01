@@ -23,9 +23,6 @@
       {% if perms.atendimento.view_comanda %}
       <a href="{% url 'atendimento:comandas' %}">Atendimento</a>
       {% endif %}
-      {% if perms.atendimento.view_comandaitem %}
-      <a href="{% url 'atendimento:cozinha' %}">Cozinha</a>
-      {% endif %}
       {% if perms.atendimento.view_caixa %}
       <a href="{% url 'atendimento:caixa' %}">Caixa</a>
       {% endif %}

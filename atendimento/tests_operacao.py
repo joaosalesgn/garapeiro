@@ -71,7 +71,8 @@ class OperacaoAtendimentoTests(TestCase):
         self.client.post(reverse("atendimento:adicionar_item", kwargs={"pk": comanda.pk}), {"produto": self.produto.pk, "quantidade": "2", "observacao": "", "adicionais": []})
         item = ComandaItem.objects.get(comanda=comanda)
         self.assertEqual(item.total, Decimal("25.00"))
-        self.assertEqual(item.status_producao, ComandaItem.StatusProducao.ENVIADO)
+        self.assertFalse(item.cancelado)
+        self.assertIsNone(item.cozinha_impresso_em)
         url = reverse("atendimento:registrar_pagamento", kwargs={"pk": comanda.pk})
         resposta = self.client.post(url, {"forma": Pagamento.Forma.PIX, "valor": "30.00", "referencia": ""}, follow=True)
         self.assertEqual(Pagamento.objects.count(), 0)
@@ -97,7 +98,7 @@ class OperacaoAtendimentoTests(TestCase):
         comanda = Comanda.objects.create(mesa=self.mesa, criado_por=self.user, atualizado_por=self.user)
         item = ComandaItem.objects.create(
             comanda=comanda, produto=self.produto, produto_nome=self.produto.nome,
-            quantidade=1, preco_unitario=self.produto.preco, status_producao=ComandaItem.StatusProducao.ENVIADO,
+            quantidade=1, preco_unitario=self.produto.preco,
          criado_por=self.user, atualizado_por=self.user)
         url = reverse("atendimento:registrar_pagamento", kwargs={"pk": comanda.pk})
         resposta = self.client.post(url, {"forma": Pagamento.Forma.PIX, "valor": "5.00", "referencia": ""})
@@ -112,8 +113,6 @@ class OperacaoAtendimentoTests(TestCase):
         self.assertIsNotNone(comanda.fechada_em)
         self.assertEqual(comanda.total_pago, Decimal("12.50"))
         self.assertEqual(Pagamento.objects.filter(caixa=caixa).count(), 2)
-        # O item permanece acessível à cozinha mesmo após a quitação automática.
-        self.assertContains(self.client.get(reverse("atendimento:cozinha")), self.produto.nome)
 
     def test_item_cancelado_e_adicional_preservados_mas_excluidos_do_total(self):
         comanda = Comanda.objects.create(mesa=self.mesa, criado_por=self.user, atualizado_por=self.user)
@@ -122,7 +121,7 @@ class OperacaoAtendimentoTests(TestCase):
         ItemAdicional.objects.create(item=item, adicional=adicional, adicional_nome=adicional.nome, preco_unitario="2.00", criado_por=self.user, atualizado_por=self.user)
         self.client.post(reverse("atendimento:cancelar_item", kwargs={"pk": comanda.pk, "item_id": item.pk}))
         item.refresh_from_db()
-        self.assertEqual(item.status_producao, ComandaItem.StatusProducao.CANCELADO)
+        self.assertTrue(item.cancelado)
         self.assertTrue(item.adicionais.exists())
         self.assertEqual(comanda.total, Decimal("0.00"))
 
@@ -134,42 +133,8 @@ class OperacaoAtendimentoTests(TestCase):
         resposta = self.client.post(reverse("atendimento:cancelar_item", kwargs={"pk": comanda.pk, "item_id": item.pk}), follow=True)
         item.refresh_from_db()
         self.assertContains(resposta, "pagamentos já registrados")
-        self.assertNotEqual(item.status_producao, ComandaItem.StatusProducao.CANCELADO)
+        self.assertFalse(item.cancelado)
         self.assertEqual(comanda.total, comanda.total_pago)
-
-    def test_fecha_comanda_apenas_com_saldo_quitado_e_itens_prontos(self):
-        caixa = Caixa.objects.create(criado_por=self.user, atualizado_por=self.user)
-        comanda = Comanda.objects.create(mesa=self.mesa, criado_por=self.user, atualizado_por=self.user)
-        item = ComandaItem.objects.create(comanda=comanda, produto=self.produto, produto_nome=self.produto.nome, quantidade=1, preco_unitario=self.produto.preco, criado_por=self.user, atualizado_por=self.user)
-        Pagamento.objects.create( comanda=comanda, caixa=caixa, forma=Pagamento.Forma.DINHEIRO, valor=self.produto.preco, criado_por=self.user, atualizado_por=self.user)
-
-        self.client.post(reverse("atendimento:fechar_comanda", kwargs={"pk": comanda.pk}), follow=True)
-
-        comanda.refresh_from_db()
-        item.refresh_from_db()
-
-        self.assertEqual(comanda.status, Comanda.Status.FECHADA)
-        self.assertEqual(item.status_producao, ComandaItem.StatusProducao.PRONTO)
-
-    def test_cozinha_avanca_item_pendente_ate_pronto(self):
-        comanda = Comanda.objects.create(mesa=self.mesa, criado_por=self.user, atualizado_por=self.user)
-        item = ComandaItem.objects.create(comanda=comanda, produto=self.produto, produto_nome=self.produto.nome, quantidade=1, preco_unitario=self.produto.preco, criado_por=self.user, atualizado_por=self.user)
-        self.assertContains(self.client.get(reverse("atendimento:cozinha")), "Pastel de queijo")
-        self.client.post(reverse("atendimento:atualizar_cozinha", kwargs={"item_id": item.pk, "status": "ENVIADO"}))
-        item.refresh_from_db()
-        self.assertEqual(item.status_producao, ComandaItem.StatusProducao.ENVIADO)
-        self.client.post(reverse("atendimento:atualizar_cozinha", kwargs={"item_id": item.pk, "status": "PRONTO"}))
-        item.refresh_from_db()
-        self.assertEqual(item.status_producao, ComandaItem.StatusProducao.PRONTO)
-
-    def test_produto_fora_da_cozinha_fica_pronto(self):
-        produto = Produto.objects.create(nome="Suco pronto", categoria=self.categoria, preco=Decimal("6.00"), vai_para_cozinha=False, criado_por=self.user, atualizado_por=self.user)
-        comanda = Comanda.objects.create(mesa=self.mesa, criado_por=self.user, atualizado_por=self.user)
-        self.client.post(reverse("atendimento:adicionar_item", kwargs={"pk": comanda.pk}), {"produto": produto.pk, "quantidade": "1", "observacao": "", "adicionais": []})
-        item = ComandaItem.objects.get(comanda=comanda)
-        self.assertEqual(item.status_producao, ComandaItem.StatusProducao.PRONTO)
-        resposta = self.client.get(reverse("atendimento:cozinha"))
-        self.assertFalse(resposta.context["itens"].filter(pk=item.pk).exists())
 
     def test_abertura_movimentacao_e_fechamento_do_caixa(self):
         self.gaveta.saldo_inicial = Decimal("100.00")
@@ -206,7 +171,7 @@ class OperacaoAtendimentoTests(TestCase):
         comanda = Comanda.objects.create(mesa=self.mesa, criado_por=self.user, atualizado_por=self.user)
         ComandaItem.objects.create(comanda=comanda, produto=self.produto, produto_nome=self.produto.nome,
                                    quantidade=1, preco_unitario=self.produto.preco,
-                                   status_producao=ComandaItem.StatusProducao.PRONTO, criado_por=self.user, atualizado_por=self.user)
+                                   criado_por=self.user, atualizado_por=self.user)
         resposta = self.client.post(reverse("atendimento:fechar_comanda", kwargs={"pk": comanda.pk}),
                                     {"cliente": cliente.pk, "vencimento": "2026-11-10"})
         self.assertRedirects(resposta, reverse("atendimento:contas_receber"))
@@ -222,7 +187,7 @@ class OperacaoAtendimentoTests(TestCase):
         comanda = Comanda.objects.create(mesa=self.mesa, criado_por=self.user, atualizado_por=self.user)
         ComandaItem.objects.create(comanda=comanda, produto=self.produto, produto_nome=self.produto.nome,
                                    quantidade=1, preco_unitario=self.produto.preco,
-                                   status_producao=ComandaItem.StatusProducao.PRONTO, criado_por=self.user, atualizado_por=self.user)
+                                   criado_por=self.user, atualizado_por=self.user)
         self.client.post(reverse("atendimento:registrar_pagamento", kwargs={"pk": comanda.pk}),
                          {"forma": Pagamento.Forma.PIX, "valor": "12.50", "referencia": ""})
         cr = ContaReceber.objects.get(comanda=comanda)
@@ -317,8 +282,7 @@ class OperacaoAtendimentoTests(TestCase):
         }
         self.assertEqual(formas_cadastradas, {Pagamento.Forma.PIX, Pagamento.Forma.DINHEIRO})
 
-    def test_telas_da_cozinha_e_caixa_carregam(self):
-        self.assertEqual(self.client.get(reverse("atendimento:cozinha")).status_code, 200)
+    def test_tela_do_caixa_carrega(self):
         self.assertEqual(self.client.get(reverse("atendimento:caixa")).status_code, 200)
 
 
@@ -332,7 +296,7 @@ class LoginEPermissoesTests(TestCase):
         grupo = Group.objects.create(name="Atendente e cozinha")
         permissoes = Permission.objects.filter(
             content_type__in=ContentType.objects.get_for_models(Comanda, ComandaItem, MovimentacaoCaixa).values()
-        ).filter(codename__in=["view_comanda", "add_comanda", "view_comandaitem", "change_comandaitem", "add_movimentacaocaixa"])
+        ).filter(codename__in=["view_comanda", "add_comanda", "add_movimentacaocaixa"])
         grupo.permissions.set(permissoes)
         self.user.groups.add(grupo)
 
@@ -349,11 +313,10 @@ class LoginEPermissoesTests(TestCase):
         resposta = self.client.get(reverse("atendimento:inicio"))
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "Atendimento")
-        self.assertContains(resposta, "Cozinha")
+        self.assertNotContains(resposta, "Cozinha")
         self.assertNotContains(resposta, "Caixa")
         self.assertNotContains(resposta, "Cadastros")
         self.assertEqual(self.client.get(reverse("atendimento:comandas")).status_code, 200)
-        self.assertEqual(self.client.get(reverse("atendimento:cozinha")).status_code, 200)
         self.assertEqual(self.client.get(reverse("atendimento:caixa")).status_code, 403)
         resposta = self.client.post(reverse("atendimento:abrir_caixa"), {"valor_inicial": "50.00"})
         self.assertEqual(resposta.status_code, 403)
