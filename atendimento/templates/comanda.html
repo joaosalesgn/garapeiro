@@ -240,7 +240,7 @@
 
                             <div class="field">
                                 <label for="id_vencimento">Vencimento</label>
-                                <input type="date" name="vencimento" id="id_vencimento" required>
+                                <input type="date" name="vencimento" id="id_vencimento" value="{% now 'Y-m-d' %}" required>
                             </div>
                         </div>
                     {% endif %}
