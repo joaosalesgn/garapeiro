@@ -79,3 +79,48 @@
     .comanda-print-actions { width: 100% }
     .payment-form-grid { grid-template-columns: 1fr; gap: 0 }
 }
+
+
+.cliente-field-row { display: flex; align-items: flex-start; gap: 8px; }
+.cliente-picker { position: relative; flex: 1 1 auto; min-width: 0; }
+.cliente-picker-select { display: none !important; }
+.cliente-picker-trigger {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    width: 100%; min-height: 42px; padding: 9px 12px; text-align: left;
+    color: inherit; background: #fff; border: 1px solid #ced4da; border-radius: 6px;
+    cursor: pointer;
+}
+.cliente-picker-panel {
+    position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; right: 0;
+    max-height: 300px; padding: 8px; overflow: auto; background: #fff;
+    border: 1px solid #ced4da; border-radius: 8px; box-shadow: 0 8px 24px #0002;
+}
+.cliente-picker-search { width: 100%; margin-bottom: 6px; }
+.cliente-picker-options { display: grid; gap: 2px; }
+.cliente-picker-option {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    width: 100%; padding: 9px 10px; text-align: left; color: inherit;
+    background: transparent; border: 0; border-radius: 5px; cursor: pointer;
+}
+.cliente-picker-option:hover, .cliente-picker-option[aria-selected="true"] { background: #f0f4f2; }
+.cliente-picker-option span { color: #667085; font-size: .9em; }
+.cliente-picker-empty { padding: 10px; color: #667085; }
+.cliente-picker-error, .cliente-modal-campo-erro, .cliente-modal-erro { margin-top: 5px; color: #b42318; font-size: .9rem; }
+.cliente-rapido-botao {
+    flex: 0 0 42px; width: 42px; height: 42px; padding: 0; border: 0; border-radius: 6px;
+    color: #fff; background: #198754; font-size: 1.6rem; line-height: 1; cursor: pointer;
+}
+.cliente-rapido-botao:hover { background: #157347; }
+.cliente-modal { width: min(460px, calc(100vw - 32px)); max-width: none; padding: 22px; border: 0; border-radius: 12px; box-shadow: 0 16px 48px #0004; }
+.cliente-modal::backdrop { background: #11182799; }
+.cliente-modal-cabecalho { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.cliente-modal-cabecalho h2 { margin: 0; font-size: 1.25rem; }
+.cliente-modal-fechar { padding: 0 6px; color: #667085; background: transparent; border: 0; font-size: 1.7rem; cursor: pointer; }
+.cliente-modal-form .field { margin-bottom: 14px; }
+.cliente-modal-acoes { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.cliente-modal-acoes button { margin: 0; }
+@media (max-width: 600px) {
+    .cliente-modal { padding: 18px; }
+    .cliente-modal-acoes { flex-direction: column-reverse; }
+    .cliente-modal-acoes button { width: 100%; }
+}

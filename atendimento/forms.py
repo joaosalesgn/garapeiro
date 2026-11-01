@@ -260,6 +260,20 @@ class NovaContaPagarForm(forms.Form):
     observacao = forms.CharField(required=False, label="Observação", widget=forms.Textarea(attrs={"rows": 2}))
 
 
+class ClienteRapidoForm(forms.Form):
+    nome = forms.CharField(max_length=150, label="Nome")
+    telefone = forms.CharField(max_length=30, required=False, label="Telefone")
+
+    def clean_nome(self):
+        nome = self.cleaned_data["nome"].strip()
+        if not nome:
+            raise ValidationError("Informe o nome do cliente.")
+        return nome
+
+    def clean_telefone(self):
+        return self.cleaned_data["telefone"].strip()
+
+
 class BaixaContaPagarForm(forms.Form):
     conta_saida = forms.ModelChoiceField(queryset=ContaFinanceira.objects.filter(ativa=True), label="Conta de saída")
     forma = forms.ChoiceField(choices=(), label="Forma de pagamento")

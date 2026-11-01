@@ -227,15 +227,34 @@
                     {% if comanda.saldo > 0 %}
                         <div class="campos-encerramento">
                             <div class="field">
-                                <label for="id_cliente">Cliente</label>
-                                <select name="cliente" id="id_cliente" {% if not comanda.cliente %}required{% endif %}>
-                                    <option value="">Selecione um cliente</option>
-                                    {% for cliente in clientes %}
-                                        <option value="{{ cliente.pk }}" {% if comanda.cliente_id == cliente.pk %}selected{% endif %}>
-                                            {{ cliente.nome }}
-                                        </option>
-                                    {% endfor %}
-                                </select>
+                                <label id="id_cliente_label">Cliente</label>
+                                <div class="cliente-field-row">
+                                    <div class="cliente-picker" data-cliente-picker data-required="{% if not comanda.cliente %}true{% else %}false{% endif %}">
+                                        <select name="cliente" id="id_cliente" class="cliente-picker-select" tabindex="-1" aria-hidden="true">
+                                            <option value="">Selecione um cliente</option>
+                                            {% for cliente in clientes %}
+                                                <option value="{{ cliente.pk }}" {% if comanda.cliente_id == cliente.pk %}selected{% endif %}>{{ cliente.nome }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <button class="cliente-picker-trigger" type="button" aria-labelledby="id_cliente_label" aria-haspopup="listbox" aria-expanded="false" data-cliente-trigger>
+                                            <span data-cliente-current>{% if comanda.cliente %}{{ comanda.cliente.nome }}{% else %}Selecione um cliente{% endif %}</span>
+                                            <span aria-hidden="true">▾</span>
+                                        </button>
+                                        <div class="cliente-picker-panel" data-cliente-panel hidden>
+                                            <input class="cliente-picker-search" type="search" placeholder="Buscar cliente pelo nome…" autocomplete="off" aria-label="Buscar cliente" data-cliente-search>
+                                            <div class="cliente-picker-options" role="listbox" aria-label="Clientes disponíveis" data-cliente-options>
+                                                {% for cliente in clientes %}
+                                                    <button class="cliente-picker-option" type="button" role="option" aria-selected="{% if comanda.cliente_id == cliente.pk %}true{% else %}false{% endif %}" data-value="{{ cliente.pk }}" data-search="{{ cliente.nome|lower }} {{ cliente.telefone|lower }}">{{ cliente.nome }}{% if cliente.telefone %}<span>{{ cliente.telefone }}</span>{% endif %}</button>
+                                                {% empty %}
+                                                    <div class="cliente-picker-empty">Nenhum cliente cadastrado.</div>
+                                                {% endfor %}
+                                            </div>
+                                            <div class="cliente-picker-empty" data-cliente-no-results hidden>Nenhum cliente encontrado.</div>
+                                        </div>
+                                        <div class="cliente-picker-error" role="alert" data-cliente-error hidden>Selecione um cliente para continuar.</div>
+                                    </div>
+                                    <button class="cliente-rapido-botao" type="button" aria-label="Cadastrar cliente rapidamente" title="Cadastrar cliente" data-abrir-cliente-rapido>+</button>
+                                </div>
                             </div>
 
                             <div class="field">
@@ -252,6 +271,32 @@
                         {% endif %}
                     </button>
                 </form>
+                {% if comanda.saldo > 0 %}
+                    <dialog class="cliente-modal" aria-labelledby="cliente-modal-titulo" data-cliente-modal>
+                        <div class="cliente-modal-cabecalho">
+                            <h2 id="cliente-modal-titulo">Cadastro rápido de cliente</h2>
+                            <button class="cliente-modal-fechar" type="button" aria-label="Fechar" data-fechar-cliente-rapido>×</button>
+                        </div>
+                        <form class="cliente-modal-form" method="post" action="{% url 'atendimento:cliente_rapido' comanda.pk %}" data-cliente-form>
+                            {% csrf_token %}
+                            <div class="field">
+                                <label for="id_cliente_rapido_nome">Nome</label>
+                                <input type="text" name="nome" id="id_cliente_rapido_nome" maxlength="150" required autocomplete="name">
+                                <div class="cliente-modal-campo-erro" data-erro-nome hidden></div>
+                            </div>
+                            <div class="field">
+                                <label for="id_cliente_rapido_telefone">Telefone <span class="subtle">(opcional)</span></label>
+                                <input type="tel" name="telefone" id="id_cliente_rapido_telefone" maxlength="30" autocomplete="tel">
+                                <div class="cliente-modal-campo-erro" data-erro-telefone hidden></div>
+                            </div>
+                            <div class="cliente-modal-erro" role="alert" data-cliente-modal-erro hidden></div>
+                            <div class="cliente-modal-acoes">
+                                <button type="button" class="btn btn-secondary" data-fechar-cliente-rapido>Cancelar</button>
+                                <button type="submit" class="btn btn-success" data-salvar-cliente-rapido>Salvar e selecionar</button>
+                            </div>
+                        </form>
+                    </dialog>
+                {% endif %}
             </section>
         {% endif %}
     {% else %}
@@ -418,6 +463,154 @@
                 campo.value = '1';
                 }
             });
+            }
+
+            const clientePicker = document.querySelector('[data-cliente-picker]');
+            if (clientePicker) {
+            const clienteSelect = clientePicker.querySelector('#id_cliente');
+            const clienteTrigger = clientePicker.querySelector('[data-cliente-trigger]');
+            const clientePanel = clientePicker.querySelector('[data-cliente-panel]');
+            const clienteSearch = clientePicker.querySelector('[data-cliente-search]');
+            const clienteCurrent = clientePicker.querySelector('[data-cliente-current]');
+            const clienteOptionsBox = clientePicker.querySelector('[data-cliente-options]');
+            const clienteNoResults = clientePicker.querySelector('[data-cliente-no-results]');
+            const clienteError = clientePicker.querySelector('[data-cliente-error]');
+            const clienteModal = document.querySelector('[data-cliente-modal]');
+            const clienteForm = document.querySelector('[data-cliente-form]');
+
+            function atualizarClienteSelecionado() {
+                const selected = clienteSelect.options[clienteSelect.selectedIndex];
+                clienteCurrent.textContent = clienteSelect.value && selected ? selected.textContent : 'Selecione um cliente';
+                clienteOptionsBox.querySelectorAll('.cliente-picker-option').forEach(option => {
+                    option.setAttribute('aria-selected', String(option.dataset.value === clienteSelect.value));
+                });
+            }
+            function filtrarClientes(consulta) {
+                const termo = consulta.trim().toLocaleLowerCase();
+                let total = 0;
+                clienteOptionsBox.querySelectorAll('.cliente-picker-option').forEach(option => {
+                    const corresponde = (option.dataset.search || '').toLocaleLowerCase().includes(termo);
+                    option.hidden = !corresponde;
+                    if (corresponde) total += 1;
+                });
+                if (clienteNoResults) clienteNoResults.hidden = total > 0;
+            }
+            function fecharClientePicker() {
+                clientePanel.hidden = true;
+                clienteTrigger.setAttribute('aria-expanded', 'false');
+            }
+            clienteTrigger.addEventListener('click', () => {
+                const abrir = clientePanel.hidden;
+                clientePanel.hidden = !abrir;
+                clienteTrigger.setAttribute('aria-expanded', String(abrir));
+                if (abrir) {
+                    clienteSearch.value = '';
+                    filtrarClientes('');
+                    clienteSearch.focus();
+                }
+            });
+            clienteSearch.addEventListener('input', () => filtrarClientes(clienteSearch.value));
+            clienteOptionsBox.addEventListener('click', event => {
+                const option = event.target.closest('.cliente-picker-option');
+                if (!option) return;
+                clienteSelect.value = option.dataset.value;
+                atualizarClienteSelecionado();
+                clienteError.hidden = true;
+                fecharClientePicker();
+                clienteTrigger.focus();
+            });
+            document.addEventListener('click', event => {
+                if (!clientePicker.contains(event.target)) fecharClientePicker();
+            });
+            const formularioEncerramento = clientePicker.closest('form');
+            formularioEncerramento.addEventListener('submit', event => {
+                if (clientePicker.dataset.required === 'true' && !clienteSelect.value) {
+                    event.preventDefault();
+                    clienteError.hidden = false;
+                    clienteTrigger.focus();
+                }
+            });
+            atualizarClienteSelecionado();
+
+            if (clienteModal && clienteForm) {
+                const abrirModal = document.querySelector('[data-abrir-cliente-rapido]');
+                const campoNome = clienteForm.querySelector('[name="nome"]');
+                const campoTelefone = clienteForm.querySelector('[name="telefone"]');
+                const erroGeral = clienteForm.querySelector('[data-cliente-modal-erro]');
+                const botaoSalvar = clienteForm.querySelector('[data-salvar-cliente-rapido]');
+                function limparErrosModal() {
+                    erroGeral.hidden = true;
+                    erroGeral.textContent = '';
+                    clienteForm.querySelectorAll('.cliente-modal-campo-erro').forEach(el => { el.hidden = true; el.textContent = ''; });
+                }
+                abrirModal.addEventListener('click', () => {
+                    limparErrosModal();
+                    clienteForm.reset();
+                    clienteModal.showModal();
+                    campoNome.focus();
+                });
+                clienteModal.querySelectorAll('[data-fechar-cliente-rapido]').forEach(botao => {
+                    botao.addEventListener('click', () => clienteModal.close());
+                });
+                clienteForm.addEventListener('submit', async event => {
+                    event.preventDefault();
+                    limparErrosModal();
+                    botaoSalvar.disabled = true;
+                    try {
+                        const resposta = await fetch(clienteForm.action, {
+                            method: 'POST',
+                            body: new FormData(clienteForm),
+                            headers: {
+                                'X-CSRFToken': clienteForm.querySelector('[name="csrfmiddlewaretoken"]').value,
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json'
+                            },
+                            credentials: 'same-origin'
+                        });
+                        const dados = await resposta.json();
+                        if (!resposta.ok) {
+                            if (dados.errors) {
+                                Object.entries(dados.errors).forEach(([campo, mensagens]) => {
+                                    const destino = clienteForm.querySelector(`[data-erro-${campo}]`);
+                                    if (destino) { destino.textContent = mensagens.join(' '); destino.hidden = false; }
+                                });
+                            } else {
+                                erroGeral.textContent = dados.error || 'Não foi possível cadastrar o cliente.';
+                                erroGeral.hidden = false;
+                            }
+                            return;
+                        }
+                        const option = document.createElement('option');
+                        option.value = dados.id;
+                        option.textContent = dados.nome;
+                        clienteSelect.add(option);
+                        const escolha = document.createElement('button');
+                        escolha.type = 'button';
+                        escolha.className = 'cliente-picker-option';
+                        escolha.setAttribute('role', 'option');
+                        escolha.dataset.value = dados.id;
+                        escolha.dataset.search = `${dados.nome} ${dados.telefone || ''}`.toLocaleLowerCase();
+                        escolha.textContent = dados.nome;
+                        if (dados.telefone) {
+                            const telefone = document.createElement('span');
+                            telefone.textContent = dados.telefone;
+                            escolha.appendChild(telefone);
+                        }
+                        clienteOptionsBox.appendChild(escolha);
+                        clienteSelect.value = String(dados.id);
+                        clientePicker.dataset.required = 'false';
+                        atualizarClienteSelecionado();
+                        clienteError.hidden = true;
+                        clienteModal.close();
+                        clienteForm.reset();
+                    } catch (erro) {
+                        erroGeral.textContent = 'Não foi possível salvar. Verifique sua conexão e tente novamente.';
+                        erroGeral.hidden = false;
+                    } finally {
+                        botaoSalvar.disabled = false;
+                    }
+                });
+            }
             }
 
             const produto = document.getElementById('id_produto');

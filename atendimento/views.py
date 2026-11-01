@@ -3,6 +3,7 @@ import os
 import uuid
 
 from django.contrib import messages
+from django.http import JsonResponse
 from django.core.exceptions import PermissionDenied
 from django.contrib.auth import views as auth_views
 from django.contrib.auth import logout as auth_logout
@@ -17,7 +18,7 @@ from django.views.decorators.http import require_POST
 from .forms import (
     AbrirCaixaForm, AdicionarItemForm, FecharCaixaForm, MovimentacaoForm,
     NovaComandaForm, PagamentoForm, EncerrarComandaForm, NovaContaPagarForm, BaixaContaPagarForm,
-    ContaFinanceiraForm, OperacaoFinanceiraForm, TransferenciaForm, CupomForm,
+    ContaFinanceiraForm, OperacaoFinanceiraForm, TransferenciaForm, CupomForm, ClienteRapidoForm,
 )
 from .impressao import ErroImpressao, imprimir_itens_cozinha, imprimir_itens_consumo
 from .models import (
@@ -551,6 +552,25 @@ def fechar_comanda(request, pk):
                         messages.success(request, f"Comanda encerrada a prazo. CR #{conta.pk} criado para {cliente}.")
                     return redirect("atendimento:inicio")
     return redirect("atendimento:comanda", pk=pk)
+
+
+@login_required
+@require_POST
+@permission_required("atendimento.change_comanda", raise_exception=True)
+def cliente_rapido(request, pk):
+    comanda = get_object_or_404(Comanda, pk=pk, status=Comanda.Status.ABERTA)
+    form = ClienteRapidoForm(request.POST)
+    if not form.is_valid():
+        erros = {campo: [str(erro) for erro in lista] for campo, lista in form.errors.items()}
+        return JsonResponse({"errors": erros}, status=400)
+
+    cliente = Cliente.objects.create(
+        nome=form.cleaned_data["nome"],
+        telefone=form.cleaned_data["telefone"],
+        criado_por=request.user,
+        atualizado_por=request.user,
+    )
+    return JsonResponse({"id": cliente.pk, "nome": cliente.nome, "telefone": cliente.telefone}, status=201)
 
 
 @login_required
