@@ -170,7 +170,7 @@
                         </div>
                         {% for adicional in item.adicionais.all %}
                             <div class="subtle">
-                                + {{ adicional.quantidade }} × {{ adicional.adicional_nome }} — R$ {{ adicional.total|floatformat:2 }}
+                                —— {{ adicional.adicional_nome }} — R$ {{ adicional.total|floatformat:2 }}
                             </div>
                         {% endfor %}
                     </div>
@@ -316,7 +316,7 @@
                         </div>
                         {% for adicional in item.adicionais.all %}
                             <div class="subtle">
-                                + {{ adicional.quantidade }} × {{ adicional.adicional_nome }} — R$ {{ adicional.total|floatformat:2 }}
+                                —— {{ adicional.adicional_nome }} — R$ {{ adicional.total|floatformat:2 }}
                             </div>
                         {% endfor %}
                     </div>
