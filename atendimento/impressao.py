@@ -55,7 +55,7 @@ def montar_comanda_cozinha(comanda, itens, agora=None) -> str:
             linhas.append("\n\x1d!\x10")
         for adicional in item.adicionais.all():
             linhas.append("\x1d!\x00")
-            linhas.extend(_quebrar_linha(f"+ {adicional.quantidade} x {adicional.adicional_nome}", 24))
+            linhas.extend(_quebrar_linha(f"- {adicional.quantidade} x {adicional.adicional_nome}", 24))
             linhas.append("\x1d!\x10")
             linhas.append("\n")
         linhas.append("\n")
@@ -85,7 +85,7 @@ def montar_comprovante_consumo(comanda, itens, agora=None) -> str:
         total += item.total
 
         for adicional in item.adicionais.all():
-            linhas.append(linha_colunas(adicional.quantidade, f"+ {adicional.adicional_nome}", adicional.preco_unitario, adicional.total, True))
+            linhas.append(linha_colunas(adicional.quantidade, f"- {adicional.adicional_nome}", adicional.preco_unitario, adicional.total, True))
             total += adicional.total
     linhas.extend(["-" * largura, "\x1d!\x10", f"TOTAL: {_moeda(total)}", "\n\n\n\n\n\x1dV\x00"])
     return "\n".join(linhas)
