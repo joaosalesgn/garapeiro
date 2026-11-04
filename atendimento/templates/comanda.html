@@ -20,6 +20,12 @@
             <form method="post" action="{% url 'atendimento:imprimir_comanda_consumo' comanda.pk %}">
                 {% csrf_token %}<button class="btn btn-primary" type="submit" {% if not itens_consumo_total %}disabled{% endif %}>Imprimir consumo</button>
             </form>
+            {% if comanda.status == 'ABERTA' and perms.atendimento.change_comanda %}
+                <form method="post" action="{% url 'atendimento:cancelar_comanda' comanda.pk %}">
+                    {% csrf_token %}
+                    <button class="btn btn-danger" type="submit" onclick="return confirm('Cancelar a comanda inteira? Todos os itens ativos serão cancelados e a mesa será liberada. Esta ação não registra pagamento.')">Cancelar comanda</button>
+                </form>
+            {% endif %}
         </div>
     </div>
     <div class="grid">

@@ -385,10 +385,6 @@ def imprimir_comanda_consumo(request, pk):
 @require_POST
 @permission_required("atendimento.add_comandaitem", raise_exception=True)
 def adicionar_item(request, pk):
-    comanda = get_object_or_404(Comanda, pk=pk)
-    if comanda.status != Comanda.Status.ABERTA:
-        messages.error(request, "Não é possível alterar uma comanda encerrada.")
-        return redirect("atendimento:comanda", pk=pk)
     form = AdicionarItemForm(request.POST)
     if not form.is_valid():
         for erro in form.errors.values():
@@ -397,6 +393,10 @@ def adicionar_item(request, pk):
     dados = form.cleaned_data
     produto = dados["produto"]
     with transaction.atomic():
+        comanda = get_object_or_404(Comanda.objects.select_for_update(), pk=pk)
+        if comanda.status != Comanda.Status.ABERTA:
+            messages.error(request, "Não é possível alterar uma comanda encerrada.")
+            return redirect("atendimento:comanda", pk=pk)
         item = ComandaItem.objects.create(
             comanda=comanda, produto=produto, produto_nome=produto.nome,
             quantidade=dados["quantidade"], preco_unitario=produto.preco,
@@ -437,6 +437,38 @@ def cancelar_item(request, pk, item_id):
 
 @login_required
 @require_POST
+@permission_required("atendimento.change_comanda", raise_exception=True)
+def cancelar_comanda(request, pk):
+    with transaction.atomic():
+        comanda = get_object_or_404(Comanda.objects.select_for_update(), pk=pk)
+        if comanda.status != Comanda.Status.ABERTA:
+            messages.error(request, "A comanda não está aberta e não pode ser cancelada.")
+        elif Pagamento.objects.filter(comanda=comanda).exists() or ContaReceber.objects.filter(comanda=comanda).exists():
+            messages.error(request, "Esta comanda já possui registros financeiros. Regularize-os antes de cancelar.")
+        else:
+            agora = timezone.now()
+            ComandaItem.objects.filter(comanda=comanda, cancelado=False).update(
+                cancelado=True,
+                atualizado_por=request.user,
+                atualizado_em=agora,
+            )
+            comanda.status = Comanda.Status.CANCELADA
+            comanda.fechada_em = agora
+            comanda.cancelado_em = agora
+            comanda.cancelado_por = request.user
+            comanda.motivo_cancelamento = "Cancelamento integral da comanda"
+            comanda.atualizado_por = request.user
+            comanda.save(update_fields=[
+                "status", "fechada_em", "cancelado_em", "cancelado_por",
+                "motivo_cancelamento", "atualizado_por", "atualizado_em",
+            ])
+            messages.success(request, "Comanda cancelada; todos os itens ativos foram cancelados e a mesa está liberada.")
+            return redirect("atendimento:inicio")
+    return redirect("atendimento:comanda", pk=pk)
+
+
+@login_required
+@require_POST
 @permission_required("atendimento.add_pagamento", raise_exception=True)
 def registrar_pagamento(request, pk):
     form = PagamentoForm(request.POST, operacoes=_operacoes(OperacaoFinanceira.Tipo.RECEBIMENTO))
@@ -448,7 +480,9 @@ def registrar_pagamento(request, pk):
         comanda = get_object_or_404(Comanda.objects.select_for_update(), pk=pk)
         caixa = Caixa.objects.select_for_update().filter(status=Caixa.Status.ABERTO).first()
         conta = ContaReceber.objects.select_for_update().filter(comanda=comanda).first()
-        if comanda.status != Comanda.Status.ABERTA and not conta:
+        if comanda.status == Comanda.Status.CANCELADA:
+            messages.error(request, "Não é possível registrar pagamento em uma comanda cancelada.")
+        elif comanda.status != Comanda.Status.ABERTA and not conta:
             messages.error(request, "Não existe conta a receber aberta para esta comanda encerrada.")
         elif not caixa:
             messages.error(request, "Abra o caixa antes de registrar recebimentos.")
@@ -625,7 +659,9 @@ def receber_conta(request, pk):
     with transaction.atomic():
         conta = get_object_or_404(ContaReceber.objects.select_for_update().select_related("comanda"), pk=pk)
         caixa = Caixa.objects.select_for_update().filter(status=Caixa.Status.ABERTO).first()
-        if conta.status == ContaReceber.Status.QUITADA:
+        if conta.comanda.status == Comanda.Status.CANCELADA:
+            messages.error(request, "Não é possível receber uma conta vinculada a uma comanda cancelada.")
+        elif conta.status == ContaReceber.Status.QUITADA:
             messages.error(request, "Esta conta a receber já está quitada.")
         elif not caixa:
             messages.error(request, "Abra o caixa antes de registrar o recebimento.")

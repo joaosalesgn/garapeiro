@@ -11,6 +11,7 @@ urlpatterns = [
     path("comandas/", views.comandas, name="comandas"),
     path("comandas/nova/", views.nova_comanda, name="nova_comanda"),
     path("comandas/<int:pk>/", views.detalhe_comanda, name="comanda"),
+    path("comandas/<int:pk>/cancelar/", views.cancelar_comanda, name="cancelar_comanda"),
     path("cupons/", views.cupons, name="cupons"),
     path("cupons/<int:pk>/", views.cupons, name="editar_cupom"),
     path("comandas/<int:pk>/imprimir/cozinha/", views.imprimir_comanda_cozinha, name="imprimir_comanda_cozinha"),
