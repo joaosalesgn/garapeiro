@@ -14,6 +14,38 @@
     Cada comanda encerrada gera um CR; os recebimentos ficam vinculados ao próprio registro.
 </p>
 <section class="card">
+    <form method="get" class="row g-3 align-items-end mb-3" aria-label="Filtros de contas a receber">
+        <div class="col-12 col-md-4">
+            <label class="form-label" for="filtro-cliente">Cliente</label>
+            <select class="form-select" id="filtro-cliente" name="cliente">
+                <option value="">Todos os clientes</option>
+                {% for cliente in clientes_filtro %}
+                    <option value="{{ cliente.pk }}" {% if filtros.cliente == cliente.pk|stringformat:"s" %}selected{% endif %}>{{ cliente.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-12 col-md-3">
+            <label class="form-label" for="filtro-status">Status</label>
+            <select class="form-select" id="filtro-status" name="status">
+                <option value="">Todos os status</option>
+                {% for valor, rotulo in status_opcoes %}
+                    <option value="{{ valor }}" {% if filtros.status == valor %}selected{% endif %}>{{ rotulo }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="form-label" for="filtro-vencimento-de">Vencimento de</label>
+            <input class="form-control" type="date" id="filtro-vencimento-de" name="vencimento_de" value="{{ filtros.vencimento_de }}">
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="form-label" for="filtro-vencimento-ate">Até</label>
+            <input class="form-control" type="date" id="filtro-vencimento-ate" name="vencimento_ate" value="{{ filtros.vencimento_ate }}">
+        </div>
+        <div class="col-12 col-md-1 d-flex gap-2">
+            <button class="btn btn-primary" type="submit">Filtrar</button>
+            <a class="btn btn-outline-secondary" href="{% url 'atendimento:contas_receber' %}">Limpar</a>
+        </div>
+    </form>
     <div class="table-wrap">
         <table class="table table-striped align-middle cp-table">
             <thead>

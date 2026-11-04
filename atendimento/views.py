@@ -576,9 +576,38 @@ def cliente_rapido(request, pk):
 @login_required
 @permission_required("atendimento.view_contareceber", raise_exception=True)
 def contas_receber(request):
-    contas = ContaReceber.objects.select_related("cliente", "comanda").order_by("vencimento", "-criado_em")
+    contas = ContaReceber.objects.select_related("cliente", "comanda").order_by("-vencimento", "-criado_em")
+
+    cliente_id = request.GET.get("cliente", "").strip()
+    status = request.GET.get("status", "").strip()
+    vencimento_de = request.GET.get("vencimento_de", "").strip()
+    vencimento_ate = request.GET.get("vencimento_ate", "").strip()
+
+    if cliente_id.isdigit():
+        contas = contas.filter(cliente_id=int(cliente_id))
+    status_validos = {opcao for opcao, _ in ContaReceber.Status.choices}
+    if status in status_validos:
+        contas = contas.filter(status=status)
+
+    from django.utils.dateparse import parse_date
+    data_de = parse_date(vencimento_de) if vencimento_de else None
+    data_ate = parse_date(vencimento_ate) if vencimento_ate else None
+    if data_de:
+        contas = contas.filter(vencimento__gte=data_de)
+    if data_ate:
+        contas = contas.filter(vencimento__lte=data_ate)
+
     return render(request, "contas_receber.html", {
-        "contas": contas, "caixa_aberto": _caixa_aberto(),
+        "contas": contas,
+        "clientes_filtro": Cliente.objects.order_by("nome"),
+        "status_opcoes": ContaReceber.Status.choices,
+        "filtros": {
+            "cliente": cliente_id if cliente_id.isdigit() else "",
+            "status": status if status in status_validos else "",
+            "vencimento_de": vencimento_de,
+            "vencimento_ate": vencimento_ate,
+        },
+        "caixa_aberto": _caixa_aberto(),
         "pode_receber": request.user.has_perm("atendimento.add_pagamento"),
         "operacoes_recebimento": _operacoes(OperacaoFinanceira.Tipo.RECEBIMENTO),
     })
