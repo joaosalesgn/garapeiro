@@ -697,7 +697,7 @@ def contas_pagar(request):
             messages.success(request, f"Conta a pagar #{conta.pk} cadastrada.")
             return redirect("atendimento:contas_pagar")
     return render(request, "contas_pagar.html", {
-        "contas": ContaPagar.objects.prefetch_related("baixas").order_by("vencimento", "-criado_em"),
+        "contas": ContaPagar.objects.select_related("fornecedor", "tipo_movimentacao").prefetch_related("baixas").order_by("-criado_em", "-pk"),
         "form": form,
         "pode_adicionar": request.user.has_perm("atendimento.add_contapagar"),
         "pode_baixar": request.user.has_perm("atendimento.add_baixacontapagar"),

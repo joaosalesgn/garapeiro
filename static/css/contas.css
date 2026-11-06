@@ -1,79 +1,68 @@
+/* Cadastro de contas: campos lado a lado para preservar a área da listagem. */
+.cp-create-card {
+    margin-bottom: 1rem;
+}
+.cp-create-form .cp-create-grid {
+    display: grid;
+    grid-template-columns: minmax(180px, 2fr) minmax(150px, 1.5fr) minmax(170px, 1.6fr) minmax(115px, .9fr) minmax(145px, 1.1fr) minmax(180px, 1.6fr);
+    gap: .65rem .8rem;
+    align-items: start;
+}
+.cp-create-field {
+    min-width: 0;
+    margin: 0;
+}
+.cp-create-field label {
+    display: block;
+    margin-bottom: .25rem;
+    font-weight: 600;
+}
+.cp-create-field input,
+.cp-create-field select,
+.cp-create-field textarea {
+    width: 100%;
+    min-width: 0;
+}
+.cp-field-observacao textarea {
+    min-height: 38px;
+    resize: vertical;
+}
+.cp-create-button {
+    margin-top: .75rem;
+    white-space: nowrap;
+}
 .cp-table-wrap {
     width: 100%;
     overflow-x: auto;
 }
-
-/* Cada campo de baixa ocupa sua própria coluna da tabela. */
 .cp-table {
-    min-width: 1420px;
+    min-width: 1540px;
 }
-
-.cp-table th:nth-child(1),
-.cp-table td:nth-child(1) {
-    min-width: 220px;
+.cp-table th, .cp-table td {
+    vertical-align: middle;
 }
-
-.cp-table th:nth-child(2),
-.cp-table td:nth-child(2) {
-    min-width: 105px;
-    white-space: nowrap;
+.cp-table th:nth-child(1), .cp-table td:nth-child(1) { min-width: 210px; }
+.cp-table th:nth-child(2), .cp-table td:nth-child(2) { min-width: 155px; }
+.cp-table th:nth-child(3), .cp-table td:nth-child(3) { min-width: 105px; white-space: nowrap; }
+.cp-table th:nth-child(4), .cp-table th:nth-child(5), .cp-table th:nth-child(6),
+.cp-table td:nth-child(4), .cp-table td:nth-child(5), .cp-table td:nth-child(6) { min-width: 100px; white-space: nowrap; }
+.cp-table th:nth-child(7), .cp-table td:nth-child(7) { min-width: 115px; }
+.cp-table th:nth-child(8), .cp-table td:nth-child(8) { min-width: 155px; }
+.cp-table th:nth-child(9), .cp-table td:nth-child(9) { min-width: 130px; }
+.cp-table th:nth-child(10), .cp-table td:nth-child(10) { min-width: 125px; }
+.cp-table th:nth-child(11), .cp-table td:nth-child(11) { min-width: 180px; }
+.cp-table th:nth-child(12), .cp-table td:nth-child(12) { min-width: 90px; }
+.cp-payment-input { width: 100%; min-width: 0; }
+.cp-payment-form { margin: 0; }
+.cp-payment-form .btn { width: 100%; min-height: 38px; white-space: nowrap; }
+.cp-payment-form .btn:disabled { cursor: not-allowed; opacity: .55; }
+.cp-payment-unavailable { min-width: 570px; }
+@media (max-width: 1200px) {
+    .cp-create-form .cp-create-grid { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
 }
-
-.cp-table th:nth-child(3),
-.cp-table th:nth-child(4),
-.cp-table th:nth-child(5),
-.cp-table td:nth-child(3),
-.cp-table td:nth-child(4),
-.cp-table td:nth-child(5) {
-    min-width: 105px;
-    white-space: nowrap;
+@media (max-width: 700px) {
+    .cp-create-form .cp-create-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-
-.cp-table th:nth-child(6),
-.cp-table td:nth-child(6) {
-    min-width: 115px;
-}
-
-.cp-table th:nth-child(7),
-.cp-table td:nth-child(7) {
-    min-width: 160px;
-}
-
-.cp-table th:nth-child(8),
-.cp-table td:nth-child(8) {
-    min-width: 125px;
-}
-
-.cp-table th:nth-child(9),
-.cp-table td:nth-child(9) {
-    min-width: 190px;
-}
-
-.cp-table th:nth-child(10),
-.cp-table td:nth-child(10) {
-    min-width: 95px;
-}
-
-.cp-table .cp-payment-input .cr-payment-input {
-    width: 100%;
-    min-width: 0;
-}
-
-.cp-payment-form .cr-payment-form {
-    margin: 0;
-}
-
-.cp-payment-form .cr-payment-form .btn {
-    width: 100%;
-    min-height: 38px;
-    white-space: nowrap;
-}
-
-.cp-payment-form .cr-payment-form .btn:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
-}
-
-.cp-payment-unavailable .cr-payment-unavailable {
-    min-width: 570px;
+@media (max-width: 480px) {
+    .cp-create-form .cp-create-grid { grid-template-columns: 1fr; }
 }

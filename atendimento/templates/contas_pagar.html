@@ -3,76 +3,76 @@
 
 {% block title %}Contas a pagar{% endblock %}
 
-{% block extra_css %}
-    <link href="{% static 'css/contas.css' %}" rel="stylesheet">
+{% block page_css %}
+<link href="{% static 'css/contas.css' %}" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
-    <h1>Contas a pagar</h1>
+<h1>Contas a pagar</h1>
 
-    {% if pode_adicionar %}
-        <section class="card">
-            <h2>Nova conta a pagar</h2>
+{% if pode_adicionar %}
+<section class="card cp-create-card">
+    <h2>Nova conta a pagar</h2>
+    <form method="post" class="cp-create-form">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <div class="cp-create-grid">
+            {% for field in form %}
+            <div class="field cp-create-field cp-field-{{ field.name }}">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {{ field.errors }}
+            </div>
+            {% endfor %}
+        </div>
+        <button class="btn btn-success cp-create-button" type="submit">Cadastrar conta</button>
+    </form>
+</section>
+{% endif %}
 
-            <form method="post">
-                {% csrf_token %}
-                {{ form.non_field_errors }}
+<section class="card">
+    <div class="table-wrap cp-table-wrap">
+        <table class="table table-striped align-middle cp-table">
+            <thead>
+                <tr>
+                    <th>Descrição / fornecedor</th>
+                    <th>Tipo de movimentação</th>
+                    <th>Vencimento</th>
+                    <th>Valor total</th>
+                    <th>Pago</th>
+                    <th>Saldo</th>
+                    <th>Status</th>
+                    <th>Conta de saída</th>
+                    <th>Forma de pagamento</th>
+                    <th>Valor da baixa</th>
+                    <th>Referência <span class="text-muted fw-normal">(opcional)</span></th>
+                    <th>Ação</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for conta in contas %}
+                <tr>
+                    <td><strong>CP #{{ conta.pk }} · {{ conta.descricao }}</strong><br>{{ conta.fornecedor.nome|default:'—' }}</td>
+                    <td>{{ conta.tipo_movimentacao.nome|default:'—' }}</td>
+                    <td>{{ conta.vencimento|date:'d/m/Y' }}</td>
+                    <td>R$ {{ conta.valor_total|floatformat:2 }}</td>
+                    <td>R$ {{ conta.total_pago|floatformat:2 }}</td>
+                    <td>R$ {{ conta.saldo|floatformat:2 }}</td>
+                    <td><span class="pill {% if conta.status != 'QUITADA' %}warn{% endif %}">{{ conta.get_status_display }}</span></td>
 
-                {% for field in form %}
-                    <div class="field">
-                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                        {{ field }}
-                        {{ field.errors }}
-                    </div>
-                {% endfor %}
-
-                <button type="submit">Cadastrar conta</button>
-            </form>
-        </section>
-    {% endif %}
-
-    <section class="card">
-        <div class="table-wrap cp-table-wrap">
-            <table class="table table-striped align-middle cp-table">
-                <thead>
-                    <tr>
-                        <th>Descrição / fornecedor</th>
-                        <th>Vencimento</th>
-                        <th>Valor total</th>
-                        <th>Pago</th>
-                        <th>Saldo</th>
-                        <th>Status</th>
-                        <th>Conta de saída</th>
-                        <th>Forma de pagamento</th>
-                        <th>Valor da baixa</th>
-                        <th>Referência <span class="text-muted fw-normal">(opcional)</span></th>
-                        <th>Ação</th>
-                    </tr>
-                </thead>
-
-                <tbody>
-                    {% for conta in contas %}
-                        <tr>
-                            <td><strong>CP #{{ conta.pk }} · {{ conta.descricao }}</strong><br> {{ conta.fornecedor.nome|default:'—' }}</td>
-                            <td>{{ conta.vencimento|date:'d/m/Y' }}</td>
-                            <td>R$ {{ conta.valor_total|floatformat:2 }}</td>
-                            <td>R$ {{ conta.total_pago|floatformat:2 }}</td>
-                            <td>R$ {{ conta.saldo|floatformat:2 }}</td>
-                            <td><span class="pill {% if conta.status != 'QUITADA' %}warn{% endif %}">{{ conta.get_status_display }}</span></td>
-
-                            {% if conta.saldo > 0 and pode_baixar and caixa_aberto %}
-                                <td>
-                                    <select class="form-select cp-payment-input" id="conta-saida-{{ conta.pk }}" name="conta_saida" form="cp-payment-{{ conta.pk }}" required>
-                                        <option value="" selected>Selecione</option>
-                                        {% for conta_financeira in contas_saida %}<option value="{{ conta_financeira.pk }}">{{ conta_financeira.get_tipo_display }}{% if conta_financeira.tipo == 'BANCO' %} #{{ conta_financeira.pk }}{% endif %}</option>{% endfor %}
-                                    </select>
-                                </td>
-                                <td>
-                                    <select class="form-select cp-payment-input" id="forma-{{ conta.pk }}" name="forma" form="cp-payment-{{ conta.pk }}" required>
-                                        <option value="" selected>Selecione</option>
-                                        {% for operacao in operacoes_pagamento %}<option value="{{ operacao.forma_pagamento }}">{{ operacao.get_forma_pagamento_display }}</option>{% endfor %}
-                                    </select>
-                                </td>
+                    {% if conta.saldo > 0 and pode_baixar and caixa_aberto %}
+                    <td>
+                        <select class="form-select cp-payment-input" id="conta-saida-{{ conta.pk }}" name="conta_saida" form="cp-payment-{{ conta.pk }}" required>
+                            <option value="" selected>Selecione</option>
+                            {% for conta_financeira in contas_saida %}<option value="{{ conta_financeira.pk }}">{{ conta_financeira.get_tipo_display }}{% if conta_financeira.tipo == 'BANCO' %} #{{ conta_financeira.pk }}{% endif %}</option>{% endfor %}
+                        </select>
+                    </td>
+                    <td>
+                        <select class="form-select cp-payment-input" id="forma-{{ conta.pk }}" name="forma" form="cp-payment-{{ conta.pk }}" required>
+                            <option value="" selected>Selecione</option>
+                            {% for operacao in operacoes_pagamento %}<option value="{{ operacao.forma_pagamento }}">{{ operacao.get_forma_pagamento_display }}</option>{% endfor %}
+                        </select>
+                    </td>
                                 <td>
                                     <input class="form-control cp-payment-input" id="valor-{{ conta.pk }}" type="number" name="valor"
                                         form="cp-payment-{{ conta.pk }}" min="0.01" max="{{ conta.saldo }}" step="0.01"
@@ -82,70 +82,53 @@
                                     <input class="form-control cp-payment-input" id="referencia-{{ conta.pk }}" type="text"
                                         name="referencia" form="cp-payment-{{ conta.pk }}" maxlength="100" placeholder="Documento ou PIX">
                                 </td>
-                                <td>
-                                    <form id="cp-payment-{{ conta.pk }}" class="cp-payment-form" method="post" action="{% url 'atendimento:baixar_conta_pagar' conta.pk %}">
-                                        {% csrf_token %}
-                                        <button class="btn btn-success" type="submit">
-                                            Pagar
-                                        </button>
-                                    </form>
-                                </td>
-                            {% else %}
-                                <td colspan="5" class="cp-payment-unavailable">
-                                    {% if conta.saldo > 0 and pode_baixar and not caixa_aberto %}
-                                        <span class="subtle">Abra o caixa para registrar a baixa.</span>
-                                    {% else %}
-                                        —
-                                    {% endif %}
-                                </td>
-                            {% endif %}
-                        </tr>
-                    {% empty %}
-                        <tr>
-                            <td colspan="11">
-                                <div class="empty">Nenhuma conta a pagar cadastrada.</div>
-                            </td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </section>
+                    <td>
+                        <form id="cp-payment-{{ conta.pk }}" class="cp-payment-form" method="post" action="{% url 'atendimento:baixar_conta_pagar' conta.pk %}">
+                            {% csrf_token %}
+                            <button class="btn btn-success" type="submit">Pagar</button>
+                        </form>
+                    </td>
+                    {% else %}
+                    <td colspan="5" class="cp-payment-unavailable">
+                        {% if conta.saldo > 0 and pode_baixar and not caixa_aberto %}<span class="subtle">Abra o caixa para registrar a baixa.</span>{% else %}—{% endif %}
+                    </td>
+                    {% endif %}
+                </tr>
+                {% empty %}
+                <tr><td colspan="12"><div class="empty">Nenhuma conta a pagar cadastrada.</div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
 
-    <script>
-        (function () {
-            function configurarBotoesDeBaixa() {
-                document.querySelectorAll('form.cp-payment-form').forEach(function (form) {
-                    const id = form.id.replace('cp-payment-', '');
-                    const forma = document.getElementById('forma-' + id);
-                    const valor = document.getElementById('valor-' + id);
-                    const contaSaida = document.getElementById('conta-saida-' + id);
-                    const botao = form.querySelector('button[type="submit"]');
-
-                    if (!forma || !valor || !botao || !contaSaida) return;
-
-                    function atualizarBotao() {
+<script>
+(function () {
+    function configurarBotoesDeBaixa() {
+        document.querySelectorAll('form.cp-payment-form').forEach(function (form) {
+            const id = form.id.replace('cp-payment-', '');
+            const forma = document.getElementById('forma-' + id);
+            const valor = document.getElementById('valor-' + id);
+            const contaSaida = document.getElementById('conta-saida-' + id);
+            const botao = form.querySelector('button[type="submit"]');
+            if (!forma || !valor || !botao || !contaSaida) return;
+            function atualizarBotao() {
                         const valorValido = valor.value.trim() !== '' &&
                             valor.checkValidity() &&
                             Number.isFinite(Number(valor.dataset.moneyCents)) &&
                             Number(valor.dataset.moneyCents) > 0
 
-                        botao.disabled = !(forma.value !== '' && contaSaida.value !== '' && valorValido);
-                    }
-
-                    forma.addEventListener('change', atualizarBotao);
-                    contaSaida.addEventListener('change', atualizarBotao);
-                    valor.addEventListener('input', atualizarBotao);
-                    valor.addEventListener('change', atualizarBotao);
-                    atualizarBotao();
-                });
+                botao.disabled = !(forma.value !== '' && contaSaida.value !== '' && valorValido);
             }
-
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', configurarBotoesDeBaixa);
-            } else {
-                configurarBotoesDeBaixa();
-            }
-        })();
-    </script>
+            forma.addEventListener('change', atualizarBotao);
+            contaSaida.addEventListener('change', atualizarBotao);
+            valor.addEventListener('input', atualizarBotao);
+            valor.addEventListener('change', atualizarBotao);
+            atualizarBotao();
+        });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', configurarBotoesDeBaixa);
+    else configurarBotoesDeBaixa();
+})();
+</script>
 {% endblock %}

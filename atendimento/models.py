@@ -411,6 +411,10 @@ class ContaPagar(RegistroBase):
         Fornecedor, on_delete=models.SET_NULL, related_name="contas_pagar",
         null=True, blank=True,
     )
+    tipo_movimentacao = models.ForeignKey(
+        TipoMovimentacao, on_delete=models.PROTECT, related_name="contas_pagar",
+        null=True, blank=True, verbose_name="Tipo de movimentação",
+    )
     valor_total = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
     vencimento = models.DateField()
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.ABERTA)
@@ -418,7 +422,7 @@ class ContaPagar(RegistroBase):
 
     class Meta:
         db_table = "tab_conta_pagar"
-        ordering = ["vencimento", "-criado_em"]
+        ordering = ["-criado_em", "-pk"]
         verbose_name = "conta a pagar"
         verbose_name_plural = "contas a pagar"
 

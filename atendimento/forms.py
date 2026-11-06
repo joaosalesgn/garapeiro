@@ -4,7 +4,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.utils.formats import number_format
 from django.utils import timezone
-from .models import (Adicional, Cliente, Comanda, ContaFinanceira, Fornecedor, Mesa, OperacaoFinanceira, Pagamento, Produto, Cupom)
+from .models import (Adicional, Cliente, Comanda, ContaFinanceira, Fornecedor, Mesa, OperacaoFinanceira, Pagamento, Produto, Cupom, TipoMovimentacao)
 
 
 class MoneyInput(forms.NumberInput):
@@ -255,6 +255,11 @@ class EncerrarComandaForm(forms.Form):
 class NovaContaPagarForm(forms.Form):
     descricao = forms.CharField(max_length=180, label="Descrição")
     fornecedor = forms.ModelChoiceField(queryset=Fornecedor.objects.filter(ativo=True).order_by("nome"), required=False, label="Fornecedor", empty_label="Selecione um fornecedor")
+    tipo_movimentacao = forms.ModelChoiceField(
+        queryset=TipoMovimentacao.objects.filter(ativo=True).order_by("nome"),
+        label="Tipo de movimentação", empty_label="Selecione um tipo",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
     valor_total = forms.DecimalField(min_value=Decimal("0.01"), max_digits=10, decimal_places=2, label="Valor", widget=MoneyInput())
     vencimento = forms.DateField(initial=timezone.localdate, widget=forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}), label="Vencimento")
     observacao = forms.CharField(required=False, label="Observação", widget=forms.Textarea(attrs={"rows": 2}))
