@@ -72,7 +72,7 @@ def _destino_recebimento(forma):
 def _gravar_recebimento(*, caixa, pagamento, forma, valor, usuario):
     """Grava bruto, taxa e líquido em caixa financeira, garantindo o link do pagamento."""
     conta, operacao = _destino_recebimento(forma)
-    taxa_pct = operacao.taxa_percentual if operacao and forma != Pagamento.Forma.DINHEIRO else Decimal("0.000")
+    taxa_pct = operacao.taxa_percentual if operacao and forma not in (Pagamento.Forma.DINHEIRO, Pagamento.Forma.IFOOD) else Decimal("0.000")
     taxa = (valor * taxa_pct / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     if not conta:
         raise ValueError("Configure uma conta financeira e uma operação para esta forma de recebimento antes de usá-la.")
@@ -205,7 +205,7 @@ def inicio(request):
     comandas_balcao_entrega = (
         Comanda.objects.filter(
             status=Comanda.Status.ABERTA,
-            canal__in=[Comanda.Canal.BALCAO, Comanda.Canal.ENTREGA],
+            canal__in=[Comanda.Canal.BALCAO, Comanda.Canal.ENTREGA, Comanda.Canal.IFOOD],
         ).select_related("cliente").order_by("canal", "-criado_em")
         if pode_atendimento else Comanda.objects.none()
     )
@@ -285,7 +285,7 @@ def nova_comanda(request):
                 return redirect("atendimento:inicio")
 
             dados = form.cleaned_data
-            comanda = Comanda.objects.create(canal=dados["canal"], mesa=dados["mesa"], cliente=dados["cliente"], observacao=dados["observacao"], criado_por=request.user, atualizado_por=request.user)
+            comanda = Comanda.objects.create(canal=dados["canal"], mesa=dados["mesa"], cliente=dados["cliente"], codigo_ifood=dados["codigo_ifood"], observacao=dados["observacao"], criado_por=request.user, atualizado_por=request.user)
 
         messages.success(request, f"Comanda #{comanda.pk} aberta.")
         return redirect("atendimento:comanda", pk=comanda.pk)
@@ -302,8 +302,9 @@ def nova_comanda(request):
 def detalhe_comanda(request, pk):
     comanda = get_object_or_404(Comanda.objects.select_related("mesa", "cliente"), pk=pk)
     caixa = _caixa_aberto()
-    item_form = AdicionarItemForm(initial={"produto": request.GET.get("produto")} if request.GET.get("produto") else None)
+    item_form = AdicionarItemForm(initial={"produto": request.GET.get("produto")} if request.GET.get("produto") else None, canal=comanda.canal)
     pagamento_form = PagamentoForm(
+        comanda=comanda,
         initial={
             "valor": max(comanda.saldo, Decimal("0.01")),
             "cupom": comanda.cupom_id,
@@ -314,6 +315,7 @@ def detalhe_comanda(request, pk):
     )
     return render(request, "comanda.html", {
         "comanda": comanda, "caixa": caixa, "item_form": item_form,
+        "preco_ifood": comanda.canal == Comanda.Canal.IFOOD,
         "pagamento_form": pagamento_form,
         "encerrar_form": EncerrarComandaForm(initial={
             "cupom": comanda.cupom_id,
@@ -399,7 +401,7 @@ def adicionar_item(request, pk):
             return redirect("atendimento:comanda", pk=pk)
         item = ComandaItem.objects.create(
             comanda=comanda, produto=produto, produto_nome=produto.nome,
-            quantidade=dados["quantidade"], preco_unitario=produto.preco,
+            quantidade=dados["quantidade"], preco_unitario=(produto.preco_ifood if comanda.canal == Comanda.Canal.IFOOD else produto.preco),
             observacao=dados["observacao"], criado_por=request.user, atualizado_por=request.user,
         )
         for adicional in dados["adicionais"]:
@@ -471,7 +473,8 @@ def cancelar_comanda(request, pk):
 @require_POST
 @permission_required("atendimento.add_pagamento", raise_exception=True)
 def registrar_pagamento(request, pk):
-    form = PagamentoForm(request.POST, operacoes=_operacoes(OperacaoFinanceira.Tipo.RECEBIMENTO))
+    comanda_forma = get_object_or_404(Comanda, pk=pk)
+    form = PagamentoForm(request.POST, operacoes=_operacoes(OperacaoFinanceira.Tipo.RECEBIMENTO), comanda=comanda_forma)
     if not form.is_valid():
         for erro in form.errors.values():
             messages.error(request, " ".join(erro))
@@ -651,7 +654,8 @@ def contas_receber(request):
 @permission_required("atendimento.add_pagamento", raise_exception=True)
 @require_POST
 def receber_conta(request, pk):
-    form = PagamentoForm(request.POST, operacoes=_operacoes(OperacaoFinanceira.Tipo.RECEBIMENTO))
+    conta_para_form = get_object_or_404(ContaReceber.objects.select_related("comanda"), pk=pk)
+    form = PagamentoForm(request.POST, operacoes=_operacoes(OperacaoFinanceira.Tipo.RECEBIMENTO), comanda=conta_para_form.comanda)
     if not form.is_valid():
         for erro in form.errors.values():
             messages.error(request, " ".join(erro))

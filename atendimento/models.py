@@ -46,6 +46,7 @@ class Produto(RegistroBase):
     nome = models.CharField(max_length=120)
     categoria = models.ForeignKey(Categoria, on_delete=models.PROTECT, related_name="produtos")
     preco = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
+    preco_ifood = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)], verbose_name="Preço iFood")
     ativo = models.BooleanField(default=True)
     vai_para_cozinha = models.BooleanField(default=False)
 
@@ -196,11 +197,13 @@ class Comanda(RegistroCancelavel):
         MESA = "MESA", "Mesa"
         BALCAO = "BALCAO", "Balcão/retirada"
         ENTREGA = "ENTREGA", "Entrega"
+        IFOOD = "IFOOD", "iFood"
 
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.ABERTA)
     canal = models.CharField(max_length=10, choices=Canal.choices, default=Canal.MESA)
     mesa = models.ForeignKey(Mesa, on_delete=models.PROTECT, related_name="comandas", null=True, blank=True)
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="comandas", null=True, blank=True)
+    codigo_ifood = models.CharField(max_length=40, blank=True, verbose_name="Código do pedido iFood")
     fechada_em = models.DateTimeField(null=True, blank=True)
     observacao = models.TextField(blank=True)
     cupom = models.ForeignKey(Cupom, on_delete=models.PROTECT, related_name="comandas", null=True, blank=True)
@@ -211,6 +214,7 @@ class Comanda(RegistroCancelavel):
         db_table = "tab_comanda"
         ordering = ["-criado_em"]
         indexes = [models.Index(fields=["status", "criado_em"], name="ix_comanda_status_data")]
+        constraints = [models.CheckConstraint(condition=(Q(canal="IFOOD", codigo_ifood__gt="") | (~Q(canal="IFOOD") & Q(codigo_ifood=""))), name="ck_comanda_codigo_ifood_canal")]
         verbose_name = "comanda"
         verbose_name_plural = "comandas"
 
@@ -305,6 +309,7 @@ class Pagamento(RegistroBase):
         CREDITO = "CREDITO", "Cartão de crédito"
         DEBITO = "DEBITO", "Cartão de débito"
         OUTRO = "OUTRO", "Outro"
+        IFOOD = "IFOOD", "iFood"
 
     comanda = models.ForeignKey(Comanda, on_delete=models.PROTECT, related_name="pagamentos")
     caixa = models.ForeignKey(Caixa, on_delete=models.PROTECT, related_name="pagamentos")

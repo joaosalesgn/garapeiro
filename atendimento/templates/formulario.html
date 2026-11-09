@@ -25,6 +25,21 @@
         </form>
     </section>
     <script>
-    (function () { const canal = document.getElementById('id_canal'), mesa = document.getElementById('id_mesa'); if (!canal || !mesa) return; function atualiza() { mesa.closest('.field').style.display = canal.value === 'MESA' ? 'block' : 'none'; if (canal.value !== 'MESA') mesa.value = '' } canal.addEventListener('change', atualiza); atualiza() })();
+    (function () {
+        const canal = document.getElementById('id_canal');
+        const mesa = document.getElementById('id_mesa');
+        const cliente = document.getElementById('id_cliente');
+        const codigo = document.getElementById('id_codigo_ifood');
+        if (!canal) return;
+        function atualiza() {
+            const ehMesa = canal.value === 'MESA';
+            const ehIfood = canal.value === 'IFOOD';
+            if (mesa) { mesa.closest('.field').style.display = ehMesa ? '' : 'none'; if (!ehMesa) mesa.value = ''; }
+            if (cliente) { cliente.closest('.field').style.display = (!ehMesa && !ehIfood) ? '' : 'none'; if (ehMesa || ehIfood) cliente.value = ''; }
+            if (codigo) { codigo.closest('.field').style.display = ehIfood ? '' : 'none'; codigo.required = ehIfood; if (!ehIfood) codigo.value = ''; }
+        }
+        canal.addEventListener('change', atualiza);
+        atualiza();
+    })();
 </script>
 {% endblock %}

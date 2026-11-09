@@ -48,6 +48,9 @@
             {% if comanda.cliente %}
                 · {{ comanda.cliente.nome }}
             {% endif %}
+            {% if comanda.canal == "IFOOD" %}
+                · Pedido iFood {{ comanda.codigo_ifood }}
+            {% endif %}
             </strong>
         </section>
         <section class="card">
@@ -89,7 +92,7 @@
                                                         <button class="product-picker-option" type="button" role="option" aria-selected="false" data-value="{{ produto.pk }}" data-search="{{ produto.nome|lower }} {{ produto.categoria.nome|default:'Sem categoria'|lower }}">
                                                             <span class="product-option-name">{{ produto.nome }}</span>
                                                             <span class="product-option-category">{{ produto.categoria.nome|default:'Sem categoria' }}</span>
-                                                            <span class="product-option-price">R$ {{ produto.preco|floatformat:2|localize }}</span>
+                                                            <span class="product-option-price">R$ {% if preco_ifood %}{{ produto.preco_ifood|floatformat:2|localize }}{% else %}{{ produto.preco|floatformat:2|localize }}{% endif %}</span>
                                                         </button>
                                                     {% empty %}
                                                         <div class="product-picker-empty-state">Nenhum produto disponível.</div>

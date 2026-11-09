@@ -8,7 +8,7 @@
 <p class="muted">Saldos por tipo de conta e formas cadastradas. As taxas incidem somente sobre recebimentos; pagamentos não recebem taxa.</p>
 <div class="grid">
   {% for conta, saldo in contas %}<section class="card">
-    <div class="muted">{{ conta.get_tipo_display }}{% if conta.tipo == 'BANCO' %} #{{ conta.pk }}{% endif %}</div>
+    <div class="muted">{{ conta.get_tipo_display }}{% if conta.tipo == 'BANCO' %} · {{ conta.nome }}{% endif %}</div>
     <div class="metric">R$ {{ saldo|floatformat:2 }}</div>
   </section>{% empty %}<section class="card">
     <p>Nenhuma conta financeira cadastrada.</p>
@@ -55,7 +55,7 @@
       <tbody>{% for op in operacoes %}<tr>
           <td>{{ op.get_tipo_display }}</td>
           <td>{{ op.get_forma_pagamento_display|default:'—' }}</td>
-          <td>{{ op.conta_padrao.get_tipo_display }}{% if conta.tipo == 'BANCO' %} #{{ conta.pk }}{% endif %}</td>
+          <td>{{ op.conta_padrao.nome }}{% if conta.tipo == 'BANCO' %} #{{ conta.pk }}{% endif %}</td>
           <td>{% if op.tipo == 'RECEBIMENTO' %}{{ op.taxa_percentual }}%{% else %}—{% endif %}</td>
         </tr>{% empty %}<tr>
           <td colspan="4">Nenhuma operação configurada.</td>
@@ -79,7 +79,7 @@
       </thead>
       <tbody>{% for mov in lancamentos %}<tr>
           <td>{{ mov.criado_em|date:'d/m/Y H:i' }}</td>
-          <td>{{ mov.conta.get_tipo_display }}{% if mov.conta.tipo == 'BANCO' %} #{{ mov.conta.pk }}{% endif %}</td>
+          <td>{{ mov.conta.nome }}{% if mov.conta.tipo == 'BANCO' %} #{{ mov.conta.pk }}{% endif %}</td>
           <td>{{ mov.descricao }}</td>
           <td>R$ {{ mov.valor_bruto|floatformat:2 }}</td>
           <td>R$ {{ mov.taxa|floatformat:2 }}</td>

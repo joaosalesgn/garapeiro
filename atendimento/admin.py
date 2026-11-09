@@ -36,7 +36,7 @@ class CategoriaAdmin(CriadoAtualizadoAdmin):
 
 @admin.register(Produto)
 class ProdutoAdmin(CriadoAtualizadoAdmin):
-    list_display = ("nome", "categoria", "preco", "vai_para_cozinha", "ativo")
+    list_display = ("nome", "categoria", "preco", "preco_ifood", "vai_para_cozinha", "ativo")
     list_filter = ("categoria", "vai_para_cozinha", "ativo")
     search_fields = ("nome", "categoria__nome")
     actions = ("inativar_produtos", "reativar_produtos")

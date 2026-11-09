@@ -27,6 +27,9 @@
                         {% if comanda.cliente %}
                             · {{ comanda.cliente.nome }}
                         {% endif %}
+                        {% if comanda.canal == "IFOOD" %}
+                            · Pedido iFood {{ comanda.codigo_ifood }}
+                        {% endif %}
                         · {{ comanda.criado_em|date:'d/m H:i' }}
                     </div>
                 </div>
@@ -49,7 +52,7 @@
                 <div class="list-row-main">
                     <strong>Comanda #{{ comanda.pk }}</strong>
                     <div class="subtle">
-                        {{ comanda.get_canal_display }} · {{ comanda.get_status_display }} · {{ comanda.criado_em|date:'d/m H:i' }}
+                        {{ comanda.get_canal_display }}{% if comanda.canal == "IFOOD" %} · Pedido iFood {{ comanda.codigo_ifood }}{% endif %} · {{ comanda.get_status_display }} · {{ comanda.criado_em|date:'d/m H:i' }}
                     </div>
                 </div>
                 <strong class="list-row-value">R$ {{ comanda.total|floatformat:2 }}</strong>

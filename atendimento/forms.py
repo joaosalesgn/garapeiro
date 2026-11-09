@@ -52,15 +52,15 @@ class OperacaoFinanceiraForm(forms.ModelForm):
         if dados.get("tipo") and not dados.get("forma_pagamento"):
             self.add_error("forma_pagamento", "Informe a forma de pagamento desta operação.")
 
-        if (dados.get("tipo") == OperacaoFinanceira.Tipo.RECEBIMENTO and dados.get("forma_pagamento") == Pagamento.Forma.DINHEIRO and dados.get("taxa_percentual") not in (None, Decimal("0.000"))):
-            self.add_error("taxa_percentual", "Recebimento em dinheiro não pode ter taxa.")
+        if (dados.get("tipo") == OperacaoFinanceira.Tipo.RECEBIMENTO and dados.get("forma_pagamento") in (Pagamento.Forma.DINHEIRO, Pagamento.Forma.IFOOD) and dados.get("taxa_percentual") not in (None, Decimal("0.000"))):
+            self.add_error("taxa_percentual", "Recebimentos em dinheiro e iFood não podem ter taxa nesta etapa.")
 
         conta = dados.get("conta_padrao")
         forma = dados.get("forma_pagamento")
         if (dados.get("tipo") == OperacaoFinanceira.Tipo.RECEBIMENTO and conta and forma):
             tipo_esperado = (ContaFinanceira.Tipo.GAVETA if forma == Pagamento.Forma.DINHEIRO else ContaFinanceira.Tipo.BANCO)
             if conta.tipo != tipo_esperado:
-                self.add_error("conta_padrao", "Dinheiro deve apontar para Gaveta; PIX e cartões devem apontar para Banco.")
+                self.add_error("conta_padrao", "Dinheiro deve apontar para Gaveta; PIX, cartões e iFood devem apontar para Banco.")
 
         return dados
 
@@ -82,12 +82,20 @@ class NovaComandaForm(forms.Form):
     canal = forms.ChoiceField(choices=Comanda.Canal.choices, initial=Comanda.Canal.MESA)
     mesa = forms.ModelChoiceField(queryset=Mesa.objects.filter(ativa=True), required=False)
     cliente = forms.ModelChoiceField(queryset=Cliente.objects.filter(ativo=True), required=False)
+    codigo_ifood = forms.CharField(required=False, max_length=40, label="Código do pedido iFood")
     observacao = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 2}))
 
     def clean(self):
         dados = super().clean()
-        if dados.get("canal") == Comanda.Canal.MESA and not dados.get("mesa"):
+        canal = dados.get("canal")
+        codigo_ifood = (dados.get("codigo_ifood") or "").strip()
+        dados["codigo_ifood"] = codigo_ifood
+        if canal == Comanda.Canal.MESA and not dados.get("mesa"):
             self.add_error("mesa", "Selecione uma mesa para atendimento no salão.")
+        if canal == Comanda.Canal.IFOOD and not codigo_ifood:
+            self.add_error("codigo_ifood", "Informe o código do pedido exibido no iFood.")
+        if canal != Comanda.Canal.IFOOD and codigo_ifood:
+            self.add_error("codigo_ifood", "O código do iFood só pode ser informado em comandas do iFood.")
 
         mesa = dados.get("mesa")
         if dados.get("canal") != Comanda.Canal.MESA and mesa:
@@ -104,10 +112,11 @@ class AdicionarItemForm(forms.Form):
     adicionais = forms.ModelMultipleChoiceField(queryset=Adicional.objects.none(), required=False)
     observacao = forms.CharField(required=False, max_length=250)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, canal=None, **kwargs):
         super().__init__(*args, **kwargs)
-
-        self.fields["produto"].label_from_instance = lambda produto: (f"{produto.nome} ——— {produto.categoria.nome} —— " f"R$ {number_format(produto.preco, decimal_pos=2, use_l10n=True)}")
+        self.canal = canal
+        atributo_preco = "preco_ifood" if canal == Comanda.Canal.IFOOD else "preco"
+        self.fields["produto"].label_from_instance = lambda produto: (f"{produto.nome} ——— {produto.categoria.nome} —— " f"R$ {number_format(getattr(produto, atributo_preco), decimal_pos=2, use_l10n=True)}")
 
         campo_adicionais = self.fields["adicionais"]
         campo_adicionais.widget = forms.CheckboxSelectMultiple()
@@ -201,14 +210,19 @@ class PagamentoForm(forms.Form):
         help_text=("Opcional. Use para número do comprovante, nota fiscal ou código PIX; deixe em branco se não houver."),
     )
 
-    def __init__(self, *args, operacoes=None, **kwargs):
+    def __init__(self, *args, operacoes=None, comanda=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.comanda = comanda
         _inicializar_cupons(self)
         operacoes = (
             operacoes
             if operacoes is not None
             else OperacaoFinanceira.objects.filter(tipo=OperacaoFinanceira.Tipo.RECEBIMENTO, ativa=True, conta_padrao__ativa=True).select_related("conta_padrao")
         )
+        if comanda and comanda.canal == Comanda.Canal.IFOOD:
+            operacoes = [op for op in operacoes if op.forma_pagamento == Pagamento.Forma.IFOOD]
+        else:
+            operacoes = [op for op in operacoes if op.forma_pagamento != Pagamento.Forma.IFOOD]
         self.fields["forma"].choices = [("", "Selecione")] + list(
             dict.fromkeys(
                 (op.forma_pagamento, op.get_forma_pagamento_display())
