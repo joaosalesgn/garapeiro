@@ -16,6 +16,7 @@ urlpatterns = [
     path("cupons/<int:pk>/", views.cupons, name="editar_cupom"),
     path("comandas/<int:pk>/imprimir/cozinha/", views.imprimir_comanda_cozinha, name="imprimir_comanda_cozinha"),
     path("comandas/<int:pk>/imprimir/consumo/", views.imprimir_comanda_consumo, name="imprimir_comanda_consumo"),
+    path("comandas/<int:pk>/imprimir/consumo/previa/", views.previa_impressao_consumo, name="previa_impressao_consumo"),
     path("comandas/<int:pk>/itens/adicionar/", views.adicionar_item, name="adicionar_item"),
     path("comandas/<int:pk>/itens/<int:item_id>/cancelar/", views.cancelar_item, name="cancelar_item"),
     path("comandas/<int:pk>/pagamentos/", views.registrar_pagamento, name="registrar_pagamento"),

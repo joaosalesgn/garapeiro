@@ -18,7 +18,7 @@ from django.views.decorators.http import require_POST
 
 from .forms import (
     AbrirCaixaForm, AdicionarItemForm, FecharCaixaForm, MovimentacaoForm,
-    NovaComandaForm, PagamentoForm, EncerrarComandaForm, NovaContaPagarForm, BaixaContaPagarForm,
+    NovaComandaForm, ComandaEnderecoForm, PagamentoForm, EncerrarComandaForm, NovaContaPagarForm, BaixaContaPagarForm,
     ContaFinanceiraForm, OperacaoFinanceiraForm, TransferenciaForm, CupomForm, ClienteRapidoForm,
 )
 from .impressao import ErroImpressao, imprimir_itens_cozinha, imprimir_itens_consumo
@@ -293,7 +293,11 @@ def nova_comanda(request):
                 return redirect("atendimento:inicio")
 
             dados = form.cleaned_data
-            comanda = Comanda.objects.create(canal=dados["canal"], mesa=dados["mesa"], cliente=dados["cliente"], codigo_ifood=dados["codigo_ifood"], observacao=dados["observacao"], criado_por=request.user, atualizado_por=request.user)
+            comanda = Comanda.objects.create(
+                canal=dados["canal"], mesa=dados["mesa"], cliente=dados["cliente"],
+                codigo_ifood=dados["codigo_ifood"],
+                observacao=dados["observacao"], criado_por=request.user, atualizado_por=request.user,
+            )
 
         messages.success(request, f"Comanda #{comanda.pk} aberta.")
         return redirect("atendimento:comanda", pk=comanda.pk)
@@ -309,6 +313,26 @@ def nova_comanda(request):
 @permission_required("atendimento.view_comanda", raise_exception=True)
 def detalhe_comanda(request, pk):
     comanda = get_object_or_404(Comanda.objects.select_related("mesa", "cliente"), pk=pk)
+    if request.method == "POST" and request.POST.get("acao") == "atualizar_endereco":
+        if not request.user.has_perm("atendimento.change_comanda"):
+            raise PermissionDenied
+        if comanda.status != Comanda.Status.ABERTA:
+            messages.error(request, "Não é possível alterar o endereço de uma comanda encerrada.")
+        elif comanda.canal not in (Comanda.Canal.ENTREGA, Comanda.Canal.IFOOD):
+            messages.error(request, "Endereço só pode ser informado em comandas de entrega ou iFood.")
+        else:
+            endereco_form = ComandaEnderecoForm(request.POST)
+            if endereco_form.is_valid():
+                comanda.endereco_entrega = endereco_form.cleaned_data["endereco_entrega"]
+                comanda.atualizado_por = request.user
+                comanda.save(update_fields=["endereco_entrega", "atualizado_por", "atualizado_em"])
+                messages.success(request, "Endereço da comanda atualizado.")
+            else:
+                for erros in endereco_form.errors.values():
+                    messages.error(request, " ".join(erros))
+        return redirect("atendimento:comanda", pk=pk)
+
+    endereco_form = ComandaEnderecoForm(initial={"endereco_entrega": comanda.endereco_entrega})
     caixa = _caixa_aberto()
     item_form = AdicionarItemForm(initial={"produto": request.GET.get("produto")} if request.GET.get("produto") else None, canal=comanda.canal)
     pagamento_form = PagamentoForm(
@@ -323,6 +347,7 @@ def detalhe_comanda(request, pk):
     )
     return render(request, "comanda.html", {
         "comanda": comanda, "caixa": caixa, "item_form": item_form,
+        "endereco_form": endereco_form,
         "preco_ifood": comanda.canal == Comanda.Canal.IFOOD,
         "pagamento_form": pagamento_form,
         "encerrar_form": EncerrarComandaForm(initial={
@@ -389,6 +414,25 @@ def imprimir_comanda_consumo(request, pk):
     else:
         messages.success(request, "Conferência de consumo enviada para impressão.")
     return redirect("atendimento:comanda", pk=pk)
+
+
+@login_required
+@permission_required("atendimento.view_comanda", raise_exception=True)
+def previa_impressao_consumo(request, pk):
+    comanda = get_object_or_404(
+        Comanda.objects.select_related("mesa", "cliente"), pk=pk
+    )
+    itens = list(
+        comanda.itens.filter(cancelado=False).prefetch_related("adicionais")
+    )
+    if not itens:
+        messages.info(request, "Esta comanda ainda não possui itens para imprimir.")
+        return redirect("atendimento:comanda", pk=pk)
+    return render(request, "imprimir_consumo_pdf.html", {
+        "comanda": comanda,
+        "itens": itens,
+        "agora": timezone.localtime(),
+    })
 
 
 @login_required

@@ -204,6 +204,7 @@ class Comanda(RegistroCancelavel):
     mesa = models.ForeignKey(Mesa, on_delete=models.PROTECT, related_name="comandas", null=True, blank=True)
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="comandas", null=True, blank=True)
     codigo_ifood = models.CharField(max_length=40, blank=True, verbose_name="Código do pedido iFood")
+    endereco_entrega = models.CharField(max_length=300, blank=True, default="", verbose_name="Endereço de entrega")
     fechada_em = models.DateTimeField(null=True, blank=True)
     observacao = models.TextField(blank=True)
     cupom = models.ForeignKey(Cupom, on_delete=models.PROTECT, related_name="comandas", null=True, blank=True)

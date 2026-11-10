@@ -106,6 +106,18 @@ class NovaComandaForm(forms.Form):
         return dados
 
 
+class ComandaEnderecoForm(forms.Form):
+    endereco_entrega = forms.CharField(
+        required=False,
+        max_length=300,
+        label="Endereço de entrega",
+        widget=forms.Textarea(attrs={"rows": 2, "autocomplete": "street-address"}),
+    )
+
+    def clean_endereco_entrega(self):
+        return self.cleaned_data["endereco_entrega"].strip()
+
+
 class AdicionarItemForm(forms.Form):
     produto = forms.ModelChoiceField(queryset=Produto.objects.filter(ativo=True).select_related("categoria"))
     quantidade = forms.IntegerField(min_value=1, max_value=999, initial=1)

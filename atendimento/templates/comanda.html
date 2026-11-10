@@ -17,6 +17,7 @@
                     <button class="btn btn-warning" type="submit" {% if not itens_cozinha_total %}disabled{% endif %}>Cozinha{% if itens_cozinha_pendentes %} ({{ itens_cozinha_pendentes }} novos){% endif %}</button>
                 </form>
             {% endif %}
+            <!-- <a class="btn btn-secondary" href="{% url 'atendimento:previa_impressao_consumo' comanda.pk %}" target="_blank" rel="noopener">Prévia PDF</a> -->
             <form method="post" action="{% url 'atendimento:imprimir_comanda_consumo' comanda.pk %}">
                 {% csrf_token %}<button class="btn btn-primary" type="submit" {% if not itens_consumo_total %}disabled{% endif %}>Imprimir consumo</button>
             </form>
@@ -60,7 +61,30 @@
             <strong>{{ comanda.criado_em|date:'d/m/Y H:i' }}</strong>
         </section>
     </div>
-    
+
+    {% if comanda.canal == "ENTREGA" or comanda.canal == "IFOOD" %}
+        <section class="card">
+            <h2>Endereço de entrega</h2>
+            {% if comanda.endereco_entrega %}
+                <p>{{ comanda.endereco_entrega|linebreaksbr }}</p>
+            {% else %}
+                <p class="subtle">Endereço ainda não informado.</p>
+            {% endif %}
+            {% if comanda.status == 'ABERTA' and perms.atendimento.change_comanda %}
+                <form method="post" action="{% url 'atendimento:comanda' comanda.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="acao" value="atualizar_endereco">
+                    <div class="field">
+                        <label for="{{ endereco_form.endereco_entrega.id_for_label }}">Informe ou corrija o endereço</label>
+                        {{ endereco_form.endereco_entrega }}
+                        {{ endereco_form.endereco_entrega.errors }}
+                    </div>
+                    <button type="submit">Salvar endereço</button>
+                </form>
+            {% endif %}
+        </section>
+    {% endif %}
+
     {% if comanda.status == 'ABERTA' %}
         <div class="grid">
             {% if perms.atendimento.add_comandaitem %}

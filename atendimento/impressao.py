@@ -77,6 +77,8 @@ def montar_comprovante_consumo(comanda, itens, agora=None) -> str:
         *_quebrar_linha(_localizar(comanda), largura),
         agora.strftime("%d/%m/%Y %H:%M:%S"), "-" * largura,
     ]
+    if comanda.canal in ("ENTREGA", "IFOOD") and comanda.endereco_entrega:
+        linhas.extend(["ENDERECO DE ENTREGA:", *_quebrar_linha(comanda.endereco_entrega, largura), "-" * largura])
     total = Decimal("0.00")
     
     linhas.append(f"{'QTDE':>4} {'PRODUTO':<19} {'VR. UNIT.':>10} {'VR. TOTAL':>10}")
@@ -95,7 +97,7 @@ def linha_colunas(qtde, produto, unitario, total, isAdicional):
     produto = str(produto)[:19]  # limita o nome para não invadir as colunas
     
     if isAdicional:
-        return (f"{"  ":>4} " f"{produto:<19} " f"{_moeda(unitario):>10} " f"{_moeda(total):>10}")
+        return ("    " f" {produto:<19} " f"{_moeda(unitario):>10} " f"{_moeda(total):>10}")
     
     return (f"{str(qtde):>4} " f"{produto:<19} " f"{_moeda(unitario):>10} " f"{_moeda(total):>10}")
 

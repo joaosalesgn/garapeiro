@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Prévia de consumo — Comanda #{{ comanda.pk }}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 16px; background: #eceeea; color: #111; font: 13px/1.35 Arial, sans-serif; }
+        .actions { max-width: 80mm; margin: 0 auto 12px; text-align: right; }
+        .actions button { padding: 9px 14px; border: 0; border-radius: 5px; background: #26734d; color: white; font-size: 14px; cursor: pointer; }
+        .ticket { width: 80mm; max-width: 100%; margin: 0 auto; padding: 4mm; background: white; }
+        h1, h2, p { margin: 0; }
+        h1 { text-align: center; font-size: 17px; }
+        h2 { margin-top: 2px; text-align: center; font-size: 13px; font-weight: 600; }
+        .center { text-align: center; }
+        .rule { margin: 8px 0; border-top: 1px dashed #222; }
+        .address { margin: 8px 0; padding: 7px 0; border-top: 1px solid #222; border-bottom: 1px solid #222; overflow-wrap: anywhere; }
+        .address-label { margin-bottom: 3px; font-weight: 700; }
+        .meta { margin-top: 5px; }
+        .item, .additional, .total { display: flex; justify-content: space-between; gap: 8px; }
+        .item { margin-top: 5px; }
+        .item-name { min-width: 0; overflow-wrap: anywhere; }
+        .additional { padding-left: 12px; font-size: 12px; }
+        .price { white-space: nowrap; }
+        .total { margin-top: 8px; padding-top: 6px; border-top: 1px dashed #222; font-size: 16px; font-weight: 700; }
+        .foot { margin-top: 12px; text-align: center; font-size: 11px; }
+        @page { size: 80mm auto; margin: 3mm; }
+        @media print {
+            body { padding: 0; background: white; }
+            .actions { display: none; }
+            .ticket { width: 74mm; max-width: none; margin: 0; padding: 0; }
+            .address, .item, .additional, .total { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <div class="actions"><button type="button" onclick="window.print()">Imprimir / Salvar como PDF</button></div>
+    <main class="ticket">
+        <h1>O GARAPEIRO CAFE</h1>
+        <h2>CONFERÊNCIA DE CONSUMO</h2>
+        <div class="rule"></div>
+        <p><strong>Comanda #{{ comanda.pk }}</strong></p>
+        <p>{{ comanda.get_canal_display }}{% if comanda.mesa %} · Mesa {{ comanda.mesa.numero }}{% endif %}</p>
+        {% if comanda.cliente %}<p>Cliente: {{ comanda.cliente.nome }}</p>{% endif %}
+        {% if comanda.canal == "IFOOD" %}<p>Pedido iFood: {{ comanda.codigo_ifood }}</p>{% endif %}
+        <p class="meta">{{ agora|date:"d/m/Y H:i:s" }}</p>
+        {% if comanda.canal == "ENTREGA" or comanda.canal == "IFOOD" %}
+            <section class="address">
+                <div class="address-label">ENDEREÇO DE ENTREGA</div>
+                <div>{{ comanda.endereco_entrega|linebreaksbr }}</div>
+            </section>
+        {% endif %}
+        <div class="rule"></div>
+        {% for item in itens %}
+            <div class="item"><span class="item-name">{{ item.quantidade }} × {{ item.produto_nome }}</span><span class="price">R$ {{ item.total|floatformat:2 }}</span></div>
+            {% if item.observacao %}<div class="additional">Obs.: {{ item.observacao }}</div>{% endif %}
+            {% for adicional in item.adicionais.all %}
+                <div class="additional"><span class="item-name">+ {{ adicional.quantidade }} × {{ adicional.adicional_nome }}</span><span class="price">R$ {{ adicional.total|floatformat:2 }}</span></div>
+            {% endfor %}
+        {% endfor %}
+        <div class="total"><span>TOTAL</span><span>R$ {{ comanda.subtotal|floatformat:2 }}</span></div>
+        {% if comanda.desconto_valor %}<div class="item"><span>Desconto</span><span class="price">- R$ {{ comanda.desconto_valor|floatformat:2 }}</span></div><div class="total"><span>TOTAL LÍQUIDO</span><span>R$ {{ comanda.total|floatformat:2 }}</span></div>{% endif %}
+        <p class="foot">Documento para conferência do consumo</p>
+    </main>
+</body>
+</html>
