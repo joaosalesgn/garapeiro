@@ -6,11 +6,7 @@
 }
 
 .movement-type-field legend {
-    float: none;
-    width: auto;
-    margin: 0 0 .5rem;
-    padding: 0;
-    font-size: .95rem;
+    font-size: .98rem;
     font-weight: 600
 }
 

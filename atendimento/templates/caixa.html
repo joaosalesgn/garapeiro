@@ -47,16 +47,16 @@
                     {% csrf_token %}
 
                     <fieldset class="movement-type-field">
-                        <legend>Tipo (obrigatório)</legend>
+                        <label>Tipo (obrigatório)</label>
                         <div class="movement-type-options">
-                            <label class="movement-type-choice" for="id_tipo_entrada">
+                            <legend class="movement-type-choice" for="id_tipo_entrada">
                                 <input type="radio" name="tipo" id="id_tipo_entrada" value="ENTRADA" required>
                                 <span>Entrada avulsa</span>
-                            </label>
-                            <label class="movement-type-choice" for="id_tipo_saida">
+                            </legend>
+                            <legend class="movement-type-choice" for="id_tipo_saida">
                                 <input type="radio" name="tipo" id="id_tipo_saida" value="SAIDA" required>
                                 <span>Saída avulsa</span>
-                            </label>
+                            </legend>
                         </div>
                     </fieldset>
 
