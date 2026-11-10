@@ -249,7 +249,7 @@ class FecharCaixaForm(forms.Form):
 
 
 class MovimentacaoForm(forms.Form):
-    tipo = forms.ChoiceField(choices=(("ENTRADA", "Entrada avulsa"), ("SAIDA", "Saída avulsa")))
+    tipo = forms.ChoiceField(choices=(("ENTRADA", "Entrada avulsa"), ("SAIDA", "Saída avulsa")), required=True, widget=forms.RadioSelect)
     descricao = forms.CharField(max_length=150)
     valor = forms.DecimalField(min_value=Decimal("0.01"), max_digits=10, decimal_places=2, widget=MoneyInput())
 

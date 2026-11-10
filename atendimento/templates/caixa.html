@@ -1,8 +1,13 @@
 {% extends 'base.html' %}
 {% load l10n %}
+{% load static %}
 
 {% block title %}
     Caixa
+{% endblock %}
+
+{% block page_css %}
+    <link href="{% static 'css/caixa.css' %}" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
@@ -41,13 +46,19 @@
                 <form method="post" action="{% url 'atendimento:registrar_movimentacao' %}">
                     {% csrf_token %}
 
-                    <div class="field">
-                        <label for="id_tipo">Tipo</label>
-                        <select name="tipo" id="id_tipo">
-                            <option value="ENTRADA">Entrada avulsa</option>
-                            <option value="SAIDA">Saída avulsa</option>
-                        </select>
-                    </div>
+                    <fieldset class="movement-type-field">
+                        <legend>Tipo (obrigatório)</legend>
+                        <div class="movement-type-options">
+                            <label class="movement-type-choice" for="id_tipo_entrada">
+                                <input type="radio" name="tipo" id="id_tipo_entrada" value="ENTRADA" required>
+                                <span>Entrada avulsa</span>
+                            </label>
+                            <label class="movement-type-choice" for="id_tipo_saida">
+                                <input type="radio" name="tipo" id="id_tipo_saida" value="SAIDA" required>
+                                <span>Saída avulsa</span>
+                            </label>
+                        </div>
+                    </fieldset>
 
                     <div class="field">
                         <label for="id_descricao">Descrição</label>

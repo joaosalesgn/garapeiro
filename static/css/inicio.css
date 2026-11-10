@@ -132,6 +132,115 @@
     grid-column: 1 / -1
 }
 
+/* ===== Movimentação avulsa: campo Tipo ===== */
+
+.movement-type-field {
+    border: 0;
+    padding: 0;
+    margin: 0 0 1rem;
+    min-width: 0
+}
+
+.movement-type-field legend {
+    float: none;
+    width: auto;
+    margin: 0 0 .5rem;
+    padding: 0;
+    font-size: .95rem;
+    font-weight: 600
+}
+
+.movement-type-options {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .65rem
+}
+
+.movement-type-choice {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: .55rem;
+    width: auto;
+    min-height: 44px;
+    margin: 0;
+    padding: .55rem .85rem;
+    border: 1px solid #d8ddd5;
+    border-radius: 9px;
+    background: #fff;
+    color: #20231f;
+    font-weight: 650;
+    line-height: 1.25;
+    cursor: pointer;
+    transition: border-color .15s ease, background-color .15s ease
+}
+
+.movement-type-choice:has(input:checked) {
+    border-color: #26734d;
+    background: #eef6f0
+}
+
+.movement-type-choice:focus-within {
+    outline: 3px solid #c9e3d0;
+    outline-offset: 1px
+}
+
+.movement-type-choice input[type="radio"] {
+    flex: 0 0 auto;
+    width: 1.1rem;
+    height: 1.1rem;
+    margin: 0;
+    accent-color: #26734d
+}
+
+.movement-type-error {
+    margin-top: .35rem;
+    color: #b64036;
+    font-size: .875rem
+}
+
+/* ===== Movimentação avulsa: tudo na mesma linha ===== */
+
+form .movement-form-row {
+    display: grid;
+    grid-template-columns: max-content minmax(240px, 360px) 128px max-content;
+    gap: 12px;
+    align-items: end;
+    width: fit-content;
+    max-width: 100%;
+}
+
+form .movement-form-row .movement-type-field,
+form .movement-form-row .field {
+    min-width: 0;
+    margin: 0;
+}
+
+form .movement-form-row .movement-type-options {
+    flex-wrap: nowrap;
+    gap: 8px;
+}
+
+form .movement-form-row .field input {
+    box-sizing: border-box;
+    width: 100%;
+}
+
+form .movement-form-row button {
+    margin: 0;
+    white-space: nowrap;
+}
+
+/* ===== Responsivo ===== */
+
+@media (max-width: 900px) {
+    form .movement-form-row {
+        grid-template-columns: 1fr;
+        width: 100%;
+    }
+}
+
 @media (max-width: 520px) {
     .tables-heading {
         flex-direction: column

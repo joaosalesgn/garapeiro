@@ -3,9 +3,11 @@
 {% block title %}
     Visão geral
 {% endblock %}
+
 {% block page_css %}
     <link href="{% static 'css/inicio.css' %}" rel="stylesheet">
 {% endblock %}
+
 {% block content %}
     <h1>
         Visão geral
@@ -126,18 +128,40 @@
                 <form method="post" action="{% url 'atendimento:registrar_movimentacao' %}">
                     {% csrf_token %}
                     <input type="hidden" name="origem" value="inicio">
-                    <div class="grid">
+                    <div class="movement-form-row">
+                        <fieldset class="movement-type-field">
+                            <legend>Tipo (obrigatório)</legend>
+                            <div class="movement-type-options">
+                                <label class="movement-type-choice" for="id_tipo_entrada">
+                                    <input type="radio" name="tipo" id="id_tipo_entrada"
+                                        value="ENTRADA" required
+                                        {% if movimentacao_form.tipo.value == 'ENTRADA' %}checked{% endif %}>
+                                    <span>Entrada avulsa</span>
+                                </label>
+                                <label class="movement-type-choice" for="id_tipo_saida">
+                                    <input type="radio" name="tipo" id="id_tipo_saida"
+                                        value="SAIDA" required
+                                        {% if movimentacao_form.tipo.value == 'SAIDA' %}checked{% endif %}>
+                                    <span>Saída avulsa</span>
+                                </label>
+                            </div>
+                            {% if movimentacao_form.tipo.errors %}
+                                <div class="movement-type-error">{{ movimentacao_form.tipo.errors }}</div>
+                            {% endif %}
+                        </fieldset>
+
                         <div class="field">
-                            <label for="id_tipo">Tipo</label>{{ movimentacao_form.tipo }}
+                            <label for="id_descricao">Descrição</label>
+                            {{ movimentacao_form.descricao }}
                         </div>
+
                         <div class="field">
-                            <label for="id_descricao">Descrição</label>{{ movimentacao_form.descricao }}
+                            <label for="id_valor">Valor</label>
+                            {{ movimentacao_form.valor }}
                         </div>
-                        <div class="field">
-                            <label for="id_valor">Valor</label>{{ movimentacao_form.valor }}
-                        </div>
+
+                        <button type="submit">Registrar movimentação</button>
                     </div>
-                    <button type="submit">Registrar movimentação</button>
                 </form>
             {% else %}
                 <div class="empty">
