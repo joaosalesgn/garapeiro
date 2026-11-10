@@ -3,6 +3,7 @@ import os
 import uuid
 
 from django.contrib import messages
+from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.core.exceptions import PermissionDenied
 from django.contrib.auth import views as auth_views
@@ -37,6 +38,13 @@ class LoginSistemaView(auth_views.LoginView):
 def logout_sistema(request):
     auth_logout(request)
     return redirect("atendimento:login")
+
+def _paginar(queryset, request, por_pagina=15):
+    pagina = Paginator(queryset, por_pagina).get_page(request.GET.get("page"))
+    parametros = request.GET.copy()
+    parametros.pop("page", None)
+    return pagina, parametros.urlencode()
+
 
 def _caixa_aberto():
     return Caixa.objects.filter(status=Caixa.Status.ABERTO).first()
@@ -634,8 +642,10 @@ def contas_receber(request):
     if data_ate:
         contas = contas.filter(vencimento__lte=data_ate)
 
+    contas, query_string = _paginar(contas, request)
     return render(request, "contas_receber.html", {
         "contas": contas,
+        "query_string": query_string,
         "clientes_filtro": Cliente.objects.order_by("nome"),
         "status_opcoes": ContaReceber.Status.choices,
         "filtros": {
@@ -700,8 +710,13 @@ def contas_pagar(request):
             conta = ContaPagar.objects.create(**form.cleaned_data, criado_por=request.user, atualizado_por=request.user)
             messages.success(request, f"Conta a pagar #{conta.pk} cadastrada.")
             return redirect("atendimento:contas_pagar")
+    contas, query_string = _paginar(
+        ContaPagar.objects.select_related("fornecedor", "tipo_movimentacao").prefetch_related("baixas").order_by("-criado_em", "-pk"),
+        request,
+    )
     return render(request, "contas_pagar.html", {
-        "contas": ContaPagar.objects.select_related("fornecedor", "tipo_movimentacao").prefetch_related("baixas").order_by("-criado_em", "-pk"),
+        "contas": contas,
+        "query_string": query_string,
         "form": form,
         "pode_adicionar": request.user.has_perm("atendimento.add_contapagar"),
         "pode_baixar": request.user.has_perm("atendimento.add_baixacontapagar"),
@@ -814,10 +829,17 @@ def tesouraria(request):
             raise PermissionDenied
     contas = ContaFinanceira.objects.filter(ativa=True)
     saldos = [(conta, _saldo_conta(conta)) for conta in contas]
+    lancamentos, query_string = _paginar(
+        LancamentoTesouraria.objects.filter(cancelado_em__isnull=True)
+        .select_related("conta", "operacao", "caixa")
+        .order_by("-criado_em", "-pk"),
+        request,
+    )
     return render(request, "tesouraria.html", {
         "contas": saldos,
         "operacoes": _operacoes(OperacaoFinanceira.Tipo.RECEBIMENTO) | _operacoes(OperacaoFinanceira.Tipo.PAGAMENTO),
-        "lancamentos": LancamentoTesouraria.objects.filter(cancelado_em__isnull=True).select_related("conta", "operacao", "caixa")[:100],
+        "lancamentos": lancamentos,
+        "query_string": query_string,
         "contas_form": contas_form, "operacao_form": operacao_form,
         "transferencia_form": transferencia_form, "caixa_aberto": _caixa_aberto(),
         "pode_cadastrar_conta": request.user.has_perm("atendimento.add_contafinanceira"),

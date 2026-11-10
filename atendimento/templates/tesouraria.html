@@ -89,5 +89,6 @@
         </tr>{% endfor %}</tbody>
     </table>
   </div>
+  {% include "paginacao.html" with pagina=lancamentos query_string=query_string %}
 </section>
 {% endblock %}
