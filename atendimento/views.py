@@ -10,12 +10,13 @@ from django.contrib.auth import views as auth_views
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required, permission_required
 from django.db import IntegrityError, transaction
-from django.db.models import Prefetch, Sum
+from django.db.models import Count, DecimalField, ExpressionWrapper, F, Prefetch, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
-
+from decimal import Decimal, InvalidOperation
 from .forms import (
     AbrirCaixaForm, AdicionarItemForm, FecharCaixaForm, MovimentacaoForm, AjusteTesourariaForm,
     NovaComandaForm, ComandaEnderecoForm, PagamentoForm, EncerrarComandaForm, NovaContaPagarForm, BaixaContaPagarForm,
@@ -25,8 +26,19 @@ from .impressao import ErroImpressao, imprimir_itens_cozinha, imprimir_itens_con
 from .models import (
     Caixa, Cliente, Comanda, ComandaItem, ItemAdicional, MovimentacaoCaixa, Pagamento,
     ContaReceber, ContaPagar, BaixaContaPagar, Mesa, ContaFinanceira, OperacaoFinanceira, LancamentoTesouraria, Cupom,
+    Categoria, Produto, Fornecedor,
 )
 
+
+
+RELATORIOS_DISPONIVEIS = [
+    ("produtos", "Vendas por produto"),
+    ("caixa", "Movimentações de caixa"),
+    ("receber", "Contas a receber"),
+    ("pagar", "Contas a pagar"),
+    ("resumo", "Resumo financeiro"),
+    ("recebimentos", "Conferência banco x gaveta"),
+]
 
 
 class LoginSistemaView(auth_views.LoginView):
@@ -1086,3 +1098,274 @@ def fechar_caixa(request):
                 caixa.save(update_fields=["status", "fechado_em", "fechado_por", "valor_fechamento", "observacao", "atualizado_por", "atualizado_em"])
                 messages.success(request, f"Caixa fechado. Esperado: R$ {resumo['esperado']:.2f}; contado: R$ {caixa.valor_fechamento:.2f}; sangria: R$ {valor_sangria:.2f}; diferença: R$ {diferenca:.2f}.")
     return redirect("atendimento:caixa")
+
+
+def _aplicar_filtro_valor(queryset, filtros, campo):
+    for nome, operador in (("valor_min", "gte"), ("valor_max", "lte")):
+        texto = filtros.get(nome, "").strip()
+        if not texto:
+            continue
+        try:
+            valor = Decimal(texto.replace(",", "."))
+            if valor >= 0:
+                queryset = queryset.filter(**{f"{campo}__{operador}": valor})
+        except (InvalidOperation, ValueError):
+            continue
+    return queryset
+
+
+def _somar(iterable):
+    return sum(iterable, Decimal("0.00"))
+
+
+@login_required
+def relatorios(request):
+    permissoes_relatorio = {
+        "produtos": request.user.has_perm("atendimento.view_comanda"),
+        "caixa": request.user.has_perm("atendimento.view_caixa"),
+        "receber": request.user.has_perm("atendimento.view_contareceber"),
+        "pagar": request.user.has_perm("atendimento.view_contapagar"),
+        "resumo": all(request.user.has_perm(p) for p in (
+            "atendimento.view_contafinanceira", "atendimento.view_contareceber",
+            "atendimento.view_contapagar",
+        )),
+        "recebimentos": request.user.has_perm("atendimento.view_pagamento"),
+    }
+    relatorios_visiveis = [
+        (chave, rotulo) for chave, rotulo in RELATORIOS_DISPONIVEIS
+        if permissoes_relatorio[chave]
+    ]
+    if not relatorios_visiveis:
+        raise PermissionDenied
+    relatorio = request.GET.get("relatorio", relatorios_visiveis[0][0]).strip()
+    if relatorio not in {chave for chave, _ in relatorios_visiveis}:
+        relatorio = relatorios_visiveis[0][0]
+
+    filtros = {nome: request.GET.get(nome, "").strip() for nome in (
+        "inicio", "fim", "caixa", "forma", "comanda", "cliente", "produto",
+        "categoria", "canal", "fornecedor", "status", "valor_min", "valor_max",
+    )}
+    hoje = timezone.localdate()
+    periodo_hoje = {"produtos", "caixa", "resumo", "recebimentos"}
+    inicio = parse_date(filtros["inicio"]) if filtros["inicio"] else None
+    fim = parse_date(filtros["fim"]) if filtros["fim"] else None
+    if relatorio in periodo_hoje and not filtros["inicio"] and not filtros["fim"]:
+        inicio = fim = hoje
+        filtros["inicio"] = filtros["fim"] = hoje.isoformat()
+
+    contexto = {
+        "relatorio": relatorio,
+        "relatorios_disponiveis": relatorios_visiveis,
+        "titulo_relatorio": dict(RELATORIOS_DISPONIVEIS)[relatorio],
+        "filtros": filtros,
+        "produtos_filtro": Produto.objects.order_by("nome"),
+        "categorias_filtro": Categoria.objects.order_by("nome"),
+        "canais": Comanda.Canal.choices,
+        "formas_pagamento": Pagamento.Forma.choices,
+        "caixas_filtro": Caixa.objects.order_by("-aberto_em"),
+        "clientes_filtro": Cliente.objects.order_by("nome"),
+        "fornecedores_filtro": Fornecedor.objects.order_by("nome"),
+    }
+
+    if relatorio == "produtos":
+        itens = ComandaItem.objects.filter(
+            cancelado=False, comanda__status=Comanda.Status.FECHADA,
+            comanda__cancelado_em__isnull=True,
+        )
+        if inicio:
+            itens = itens.filter(comanda__fechada_em__date__gte=inicio)
+        if fim:
+            itens = itens.filter(comanda__fechada_em__date__lte=fim)
+        if filtros["produto"].isdigit():
+            itens = itens.filter(produto_id=int(filtros["produto"]))
+        if filtros["categoria"].isdigit():
+            itens = itens.filter(produto__categoria_id=int(filtros["categoria"]))
+        if filtros["canal"] in {valor for valor, _ in Comanda.Canal.choices}:
+            itens = itens.filter(comanda__canal=filtros["canal"])
+        valor_item = ExpressionWrapper(
+            F("preco_unitario") * F("quantidade"),
+            output_field=DecimalField(max_digits=14, decimal_places=2),
+        )
+        linhas = itens.values("produto_nome", "produto__categoria__nome").annotate(
+            quantidade_total=Sum("quantidade"),
+            comandas=Count("comanda_id", distinct=True),
+            valor_total=Sum(valor_item),
+        ).order_by("produto_nome")
+        totais = itens.aggregate(
+            quantidade_vendida=Sum("quantidade"),
+            valor_itens=Sum(valor_item),
+        )
+        contexto.update({
+            "linhas_produto": linhas,
+            "total_quantidade": totais["quantidade_vendida"] or 0,
+            "total_comandas": itens.values("comanda_id").distinct().count(),
+            "total_vendas": totais["valor_itens"] or Decimal("0.00"),
+        })
+
+    elif relatorio == "caixa":
+        movimentos = LancamentoTesouraria.objects.filter(cancelado_em__isnull=True).select_related(
+            "conta", "caixa", "pagamento__comanda__cliente", "baixa_cp__conta",
+        )
+        if inicio:
+            movimentos = movimentos.filter(criado_em__date__gte=inicio)
+        if fim:
+            movimentos = movimentos.filter(criado_em__date__lte=fim)
+        if filtros["caixa"].isdigit():
+            movimentos = movimentos.filter(caixa_id=int(filtros["caixa"]))
+        if filtros["forma"] in {valor for valor, _ in Pagamento.Forma.choices}:
+            movimentos = movimentos.filter(
+                Q(pagamento__forma=filtros["forma"]) | Q(baixa_cp__forma=filtros["forma"])
+            )
+        if filtros["comanda"].isdigit():
+            movimentos = movimentos.filter(pagamento__comanda_id=int(filtros["comanda"]))
+        if filtros["cliente"].isdigit():
+            movimentos = movimentos.filter(pagamento__comanda__cliente_id=int(filtros["cliente"]))
+        movimentos = movimentos.order_by("-criado_em", "-pk")
+        total_entradas = total_saidas = Decimal("0.00")
+        for movimento in movimentos:
+            if movimento.direcao == "ENTRADA":
+                total_entradas += movimento.valor
+            else:
+                total_saidas += movimento.valor
+        contexto.update({
+            "lancamentos_caixa": movimentos,
+            "total_entradas": total_entradas,
+            "total_saidas": total_saidas,
+            "saldo_movimentacoes": total_entradas - total_saidas,
+        })
+
+    elif relatorio == "receber":
+        contas = ContaReceber.objects.select_related("cliente", "comanda").prefetch_related(
+            "comanda__pagamentos",
+        ).order_by("-vencimento", "-pk")
+        if inicio:
+            contas = contas.filter(vencimento__gte=inicio)
+        if fim:
+            contas = contas.filter(vencimento__lte=fim)
+        if filtros["cliente"].isdigit():
+            contas = contas.filter(cliente_id=int(filtros["cliente"]))
+        if filtros["status"] in {valor for valor, _ in ContaReceber.Status.choices}:
+            contas = contas.filter(status=filtros["status"])
+        contas = _aplicar_filtro_valor(contas, filtros, "valor_total")
+        total_contas = total_recebido = total_saldo = Decimal("0.00")
+        for conta in contas:
+            conta.total_recebido_relatorio = _somar(p.valor for p in conta.comanda.pagamentos.all())
+            conta.saldo_relatorio = max(conta.valor_total - conta.total_recebido_relatorio, Decimal("0.00"))
+            total_contas += conta.valor_total
+            total_recebido += conta.total_recebido_relatorio
+            total_saldo += conta.saldo_relatorio
+        contexto.update({
+            "contas_receber": contas, "total_contas": total_contas,
+            "total_recebido": total_recebido, "total_saldo": total_saldo,
+            "status_opcoes": ContaReceber.Status.choices,
+        })
+
+    elif relatorio == "pagar":
+        contas = ContaPagar.objects.select_related("fornecedor").prefetch_related("baixas").order_by(
+            "-vencimento", "-pk",
+        )
+        if inicio:
+            contas = contas.filter(vencimento__gte=inicio)
+        if fim:
+            contas = contas.filter(vencimento__lte=fim)
+        if filtros["fornecedor"].isdigit():
+            contas = contas.filter(fornecedor_id=int(filtros["fornecedor"]))
+        if filtros["status"] in {valor for valor, _ in ContaPagar.Status.choices}:
+            contas = contas.filter(status=filtros["status"])
+        contas = _aplicar_filtro_valor(contas, filtros, "valor_total")
+        total_contas = total_pago = total_saldo = Decimal("0.00")
+        for conta in contas:
+            conta.total_pago_relatorio = _somar(baixa.valor for baixa in conta.baixas.all())
+            conta.saldo_relatorio = max(conta.valor_total - conta.total_pago_relatorio, Decimal("0.00"))
+            total_contas += conta.valor_total
+            total_pago += conta.total_pago_relatorio
+            total_saldo += conta.saldo_relatorio
+        contexto.update({
+            "contas_pagar": contas, "total_contas": total_contas,
+            "total_pago": total_pago, "total_saldo": total_saldo,
+            "status_opcoes": ContaPagar.Status.choices,
+        })
+
+    elif relatorio == "resumo":
+        movimentos = LancamentoTesouraria.objects.filter(cancelado_em__isnull=True).select_related("conta")
+        if inicio:
+            movimentos = movimentos.filter(criado_em__date__gte=inicio)
+        if fim:
+            movimentos = movimentos.filter(criado_em__date__lte=fim)
+        resumo = {
+            "bruto": Decimal("0.00"), "taxas": Decimal("0.00"),
+            "recebimentos": Decimal("0.00"), "pagamentos": Decimal("0.00"),
+            "saldo_periodo": Decimal("0.00"), "cr_aberto": Decimal("0.00"),
+            "cp_aberto": Decimal("0.00"),
+        }
+        por_conta = {}
+        for mov in movimentos:
+            if mov.tipo == LancamentoTesouraria.Tipo.RECEBIMENTO:
+                resumo["bruto"] += mov.valor_bruto
+                resumo["taxas"] += mov.taxa
+                resumo["recebimentos"] += mov.valor
+                resumo["saldo_periodo"] += mov.valor
+            elif mov.tipo == LancamentoTesouraria.Tipo.PAGAMENTO:
+                resumo["pagamentos"] += mov.valor
+                resumo["saldo_periodo"] -= mov.valor
+            elif mov.tipo in {LancamentoTesouraria.Tipo.AJUSTE_ENTRADA, LancamentoTesouraria.Tipo.AJUSTE_SAIDA}:
+                resumo["saldo_periodo"] += mov.valor if mov.direcao == "ENTRADA" else -mov.valor
+            if mov.tipo in {LancamentoTesouraria.Tipo.TRANSFERENCIA_ENTRADA, LancamentoTesouraria.Tipo.TRANSFERENCIA_SAIDA, LancamentoTesouraria.Tipo.SALDO_INICIAL}:
+                continue
+            linha = por_conta.setdefault(mov.conta_id, {
+                "conta": mov.conta, "entradas": Decimal("0.00"),
+                "saidas": Decimal("0.00"), "taxas": Decimal("0.00"),
+                "movimento_liquido": Decimal("0.00"),
+            })
+            linha["taxas"] += mov.taxa
+            if mov.direcao == "ENTRADA":
+                linha["entradas"] += mov.valor
+                linha["movimento_liquido"] += mov.valor
+            else:
+                linha["saidas"] += mov.valor
+                linha["movimento_liquido"] -= mov.valor
+        resumo["contas"] = list(por_conta.values())
+        resumo["cr_aberto"] = _somar(c.saldo for c in ContaReceber.objects.exclude(status=ContaReceber.Status.QUITADA))
+        resumo["cp_aberto"] = _somar(c.saldo for c in ContaPagar.objects.exclude(status=ContaPagar.Status.QUITADA))
+        contexto["resumo"] = resumo
+
+    elif relatorio == "recebimentos":
+        pagamentos = Pagamento.objects.filter(
+            comanda__cancelado_em__isnull=True,
+        ).select_related(
+            "caixa", "comanda", "comanda__cliente", "lancamento_tesouraria__conta",
+        ).order_by("-criado_em", "-pk")
+        if inicio:
+            pagamentos = pagamentos.filter(criado_em__date__gte=inicio)
+        if fim:
+            pagamentos = pagamentos.filter(criado_em__date__lte=fim)
+        if filtros["caixa"].isdigit():
+            pagamentos = pagamentos.filter(caixa_id=int(filtros["caixa"]))
+        if filtros["forma"] in {valor for valor, _ in Pagamento.Forma.choices}:
+            pagamentos = pagamentos.filter(forma=filtros["forma"])
+        if filtros["comanda"].isdigit():
+            pagamentos = pagamentos.filter(comanda_id=int(filtros["comanda"]))
+        if filtros["cliente"].isdigit():
+            pagamentos = pagamentos.filter(comanda__cliente_id=int(filtros["cliente"]))
+        pagamentos = list(pagamentos)
+        banco_bruto = banco_liquido = gaveta = outros = Decimal("0.00")
+        for pagamento in pagamentos:
+            lancamento = getattr(pagamento, "lancamento_tesouraria", None)
+            taxa = lancamento.taxa if lancamento else Decimal("0.00")
+            conta_destino = lancamento.conta if lancamento else None
+            pagamento.taxa_relatorio = taxa
+            pagamento.liquido_relatorio = lancamento.valor if lancamento else pagamento.valor
+            pagamento.destino_relatorio = conta_destino.nome if conta_destino else "Não identificado"
+            if conta_destino and conta_destino.tipo == ContaFinanceira.Tipo.BANCO:
+                banco_bruto += pagamento.valor
+                banco_liquido += pagamento.liquido_relatorio
+            elif conta_destino and conta_destino.tipo == ContaFinanceira.Tipo.GAVETA:
+                gaveta += pagamento.valor
+            else:
+                outros += pagamento.valor
+        contexto.update({
+            "pagamentos": pagamentos,
+            "conciliacao": {"banco_bruto": banco_bruto, "banco_liquido": banco_liquido, "gaveta": gaveta, "outros": outros},
+        })
+
+    return render(request, "relatorios.html", contexto)

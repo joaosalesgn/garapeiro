@@ -1,0 +1,106 @@
+.reports-layout {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: 1.25rem;
+    align-items: start
+}
+
+.reports-nav {
+    position: sticky;
+    top: 1rem
+}
+
+.reports-nav a {
+    display: block;
+    padding: .7rem .85rem;
+    border-radius: .55rem;
+    text-decoration: none;
+    color: inherit
+}
+
+.reports-nav a.active,
+.reports-nav a:hover {
+    background: #f0e8dc;
+    color: #4d2e16
+}
+
+.reports-content {
+    min-width: 0
+}
+
+.report-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: .75rem;
+    align-items: end
+}
+
+.report-filters label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: .25rem
+}
+
+.report-filters input,
+.report-filters select {
+    width: 100%;
+    min-height: 42px
+}
+
+.report-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: .75rem;
+    margin-bottom: 1rem
+}
+
+.report-summary .card {
+    padding: 1rem
+}
+
+.report-table {
+    min-width: 760px
+}
+
+.report-note {
+    font-size: .9rem;
+    color: #666
+}
+
+@media(max-width:760px) {
+    .reports-layout {
+        grid-template-columns: 1fr
+    }
+
+    .reports-nav {
+        position: static
+    }
+
+    .reports-nav-list {
+        display: flex;
+        gap: .35rem;
+        overflow: auto
+    }
+
+    .reports-nav a {
+        white-space: nowrap;
+        border: 1px solid #ddd
+    }
+}
+
+@media print {
+
+    .reports-nav,
+    .report-filters,
+    .no-print {
+        display: none !important
+    }
+
+    .reports-layout {
+        display: block
+    }
+
+    .card {
+        box-shadow: none !important
+    }
+}

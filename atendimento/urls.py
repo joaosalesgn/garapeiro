@@ -27,6 +27,7 @@ urlpatterns = [
     path("contas-a-pagar/", views.contas_pagar, name="contas_pagar"),
     path("contas-a-pagar/<int:pk>/baixar/", views.baixar_conta_pagar, name="baixar_conta_pagar"),
     path("tesouraria/", views.tesouraria, name="tesouraria"),
+    path("relatorios/", views.relatorios, name="relatorios"),
     path("caixa/", views.caixa, name="caixa"),
     path("caixa/abrir/", views.abrir_caixa, name="abrir_caixa"),
     path("caixa/movimentacoes/", views.registrar_movimentacao, name="registrar_movimentacao"),
