@@ -39,6 +39,14 @@
         type="submit">Registrar transferência</button></form>{% else %}<p>Abra o caixa para registrar transferências.
     </p>{% endif %}
   </section>{% endif %}
+  {% if pode_ajustar %}<section class="card">
+    <h2>Ajuste de saldo</h2>
+    <p class="muted">Use para corrigir valores lançando uma entrada ou saída com motivo. Saídas não podem superar o saldo da conta.</p>
+    <form method="post">{% csrf_token %}<input type="hidden" name="acao" value="ajuste">
+      {% for field in ajuste_form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}
+      <button type="submit">Registrar ajuste</button>
+    </form>
+  </section>{% endif %}
 </div>
 <section class="card">
   <h2>Operações configuradas</h2>

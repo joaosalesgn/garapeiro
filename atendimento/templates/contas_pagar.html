@@ -64,7 +64,7 @@
                     <td>
                         <select class="form-select cp-payment-input" id="conta-saida-{{ conta.pk }}" name="conta_saida" form="cp-payment-{{ conta.pk }}" required>
                             <option value="" selected>Selecione</option>
-                            {% for conta_financeira in contas_saida %}<option value="{{ conta_financeira.pk }}">{{ conta_financeira.get_tipo_display }}{% if conta_financeira.tipo == 'BANCO' %} #{{ conta_financeira.pk }}{% endif %}</option>{% endfor %}
+                            {% for conta_financeira in contas_saida %}<option value="{{ conta_financeira.pk }}">{{ conta_financeira.nome }}</option>{% endfor %}
                         </select>
                     </td>
                     <td>

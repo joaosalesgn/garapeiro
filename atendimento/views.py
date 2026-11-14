@@ -17,7 +17,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .forms import (
-    AbrirCaixaForm, AdicionarItemForm, FecharCaixaForm, MovimentacaoForm,
+    AbrirCaixaForm, AdicionarItemForm, FecharCaixaForm, MovimentacaoForm, AjusteTesourariaForm,
     NovaComandaForm, ComandaEnderecoForm, PagamentoForm, EncerrarComandaForm, NovaContaPagarForm, BaixaContaPagarForm,
     ContaFinanceiraForm, OperacaoFinanceiraForm, TransferenciaForm, CupomForm, ClienteRapidoForm,
 )
@@ -806,6 +806,7 @@ def tesouraria(request):
     contas_form = ContaFinanceiraForm(prefix="conta")
     operacao_form = OperacaoFinanceiraForm(prefix="operacao")
     transferencia_form = TransferenciaForm(prefix="transferencia")
+    ajuste_form = AjusteTesourariaForm(prefix="ajuste")
     if request.method == "POST":
         acao = request.POST.get("acao")
         if acao == "conta" and request.user.has_perm("atendimento.add_contafinanceira"):
@@ -869,6 +870,49 @@ def tesouraria(request):
                     LancamentoTesouraria.objects.create(conta=dados["destino"], tipo=LancamentoTesouraria.Tipo.TRANSFERENCIA_ENTRADA, descricao=dados["descricao"], **comum)
                     messages.success(request, "Transferência registrada nas duas contas.")
                     return redirect("atendimento:tesouraria")
+        elif acao == "ajuste" and request.user.has_perm("atendimento.add_lancamentotesouraria"):
+            ajuste_form = AjusteTesourariaForm(request.POST, prefix="ajuste")
+            if ajuste_form.is_valid():
+                dados = ajuste_form.cleaned_data
+                with transaction.atomic():
+                    conta = get_object_or_404(
+                        ContaFinanceira.objects.select_for_update().filter(ativa=True),
+                        pk=dados["conta"].pk,
+                    )
+                    caixa_atual = Caixa.objects.select_for_update().filter(status=Caixa.Status.ABERTO).first()
+                    tipo = (
+                        LancamentoTesouraria.Tipo.AJUSTE_ENTRADA
+                        if dados["tipo"] == "ENTRADA"
+                        else LancamentoTesouraria.Tipo.AJUSTE_SAIDA
+                    )
+                    if tipo == LancamentoTesouraria.Tipo.AJUSTE_SAIDA and dados["valor"] > _saldo_conta(conta):
+                        messages.error(request, "O valor da saída supera o saldo disponível na conta escolhida.")
+                    else:
+                        referencia = ""
+                        if conta.tipo == ContaFinanceira.Tipo.GAVETA and caixa_atual:
+                            movimento = MovimentacaoCaixa.objects.create(
+                                caixa=caixa_atual,
+                                tipo=(MovimentacaoCaixa.Tipo.ENTRADA if dados["tipo"] == "ENTRADA" else MovimentacaoCaixa.Tipo.SAIDA),
+                                descricao=dados["descricao"],
+                                valor=dados["valor"],
+                                criado_por=request.user,
+                                atualizado_por=request.user,
+                            )
+                            referencia = f"Ajuste manual de caixa #{movimento.pk}"
+                        LancamentoTesouraria.objects.create(
+                            conta=conta,
+                            caixa=caixa_atual,
+                            tipo=tipo,
+                            descricao=dados["descricao"],
+                            valor_bruto=dados["valor"],
+                            taxa=Decimal("0.00"),
+                            valor=dados["valor"],
+                            referencia=referencia,
+                            criado_por=request.user,
+                            atualizado_por=request.user,
+                        )
+                        messages.success(request, f"Ajuste de {dados['tipo'].lower()} registrado na conta {conta.nome}.")
+                        return redirect("atendimento:tesouraria")
         else:
             raise PermissionDenied
     contas = ContaFinanceira.objects.filter(ativa=True)
@@ -885,7 +929,9 @@ def tesouraria(request):
         "lancamentos": lancamentos,
         "query_string": query_string,
         "contas_form": contas_form, "operacao_form": operacao_form,
-        "transferencia_form": transferencia_form, "caixa_aberto": _caixa_aberto(),
+        "transferencia_form": transferencia_form, "ajuste_form": ajuste_form,
+        "caixa_aberto": _caixa_aberto(),
+        "pode_ajustar": request.user.has_perm("atendimento.add_lancamentotesouraria"),
         "pode_cadastrar_conta": request.user.has_perm("atendimento.add_contafinanceira"),
         "pode_cadastrar_operacao": request.user.has_perm("atendimento.add_operacaofinanceira"),
         "pode_transferir": request.user.has_perm("atendimento.add_lancamentotesouraria"),

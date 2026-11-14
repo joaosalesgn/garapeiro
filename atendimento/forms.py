@@ -78,6 +78,33 @@ class TransferenciaForm(forms.Form):
         return dados
 
 
+class AjusteTesourariaForm(forms.Form):
+    conta = forms.ModelChoiceField(
+        queryset=ContaFinanceira.objects.filter(ativa=True),
+        label="Conta financeira",
+        empty_label="Selecione uma conta",
+    )
+    tipo = forms.ChoiceField(
+        choices=(("ENTRADA", "Entrada / acrescentar saldo"), ("SAIDA", "Saída / reduzir saldo")),
+        label="Ajuste",
+    )
+    descricao = forms.CharField(max_length=180, label="Motivo do ajuste")
+    valor = forms.DecimalField(
+        min_value=Decimal("0.01"), max_digits=12, decimal_places=2,
+        label="Valor", widget=MoneyInput(),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["conta"].queryset = ContaFinanceira.objects.filter(ativa=True).order_by("tipo", "nome")
+
+    def clean_descricao(self):
+        descricao = self.cleaned_data["descricao"].strip()
+        if not descricao:
+            raise ValidationError("Informe o motivo do ajuste para manter o histórico claro.")
+        return descricao
+
+
 class NovaComandaForm(forms.Form):
     canal = forms.ChoiceField(choices=Comanda.Canal.choices, initial=Comanda.Canal.MESA)
     mesa = forms.ModelChoiceField(queryset=Mesa.objects.filter(ativa=True), required=False)
