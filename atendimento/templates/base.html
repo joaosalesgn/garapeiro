@@ -26,7 +26,7 @@
       {% if perms.atendimento.view_caixa %}
       <a href="{% url 'atendimento:caixa' %}">Caixa</a>
       {% endif %}
-      {% if perms.atendimento.view_caixa or perms.atendimento.view_comanda or perms.atendimento.view_contareceber or perms.atendimento.view_contapagar or perms.atendimento.view_pagamento %}
+      {% if perms.atendimento.view_caixa or perms.atendimento.view_contapagar %}
       <a href="{% url 'atendimento:relatorios' %}">Relatórios</a>
       {% endif %}
       {% if perms.atendimento.view_contafinanceira %}
